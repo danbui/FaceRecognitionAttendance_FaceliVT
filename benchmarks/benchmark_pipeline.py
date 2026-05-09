@@ -32,11 +32,21 @@ from datetime import datetime
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.config import DB_PATH, RECOGNITION_COSINE_THRESHOLD
+from app.config import DB_PATH, RECOGNITION_COSINE_THRESHOLD, FACELIVT_MODEL, YUNET_MODEL
 from app.database import init_db, create_employee, save_embedding, load_embeddings
 from app.face_detector import FaceDetector
 from app.face_embedder import FaceEmbedder
 from app.matcher import match_embedding, embedding_cache
+from benchmarks.report_utils import (
+    classification_metrics,
+    confusion_top_n,
+    compute_model_sha256,
+    get_git_commit,
+    now_utc_iso,
+    write_confusion_csv,
+    write_json,
+    write_markdown,
+)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -48,6 +58,7 @@ RANDOM_SEED = 42
 BENCHMARK_DIR = PROJECT_ROOT / "data_benchmark"
 TRAIN_DIR = BENCHMARK_DIR / "train"
 TEST_DIR = BENCHMARK_DIR / "test"
+REPORTS_DIR = PROJECT_ROOT / "reports"
 
 
 def sanitize_name(name: str) -> str:
@@ -268,6 +279,8 @@ def test_recognition(detector: FaceDetector, embedder: FaceEmbedder):
     wrong_details = []
     confidences_correct = []
     confidences_wrong = []
+    y_true = []
+    y_pred = []
 
     person_dirs = sorted(TEST_DIR.iterdir())
     total_persons = len([d for d in person_dirs if d.is_dir()])
@@ -307,13 +320,19 @@ def test_recognition(detector: FaceDetector, embedder: FaceEmbedder):
 
                 if result is None:
                     not_found += 1
+                    y_true.append(true_code)
+                    y_pred.append("__NOT_FOUND__")
                 elif result["employee_code"] == true_code:
                     correct += 1
                     person_correct += 1
                     confidences_correct.append(result["confidence"])
+                    y_true.append(true_code)
+                    y_pred.append(result["employee_code"])
                 else:
                     wrong += 1
                     confidences_wrong.append(result["confidence"])
+                    y_true.append(true_code)
+                    y_pred.append(result["employee_code"])
                     wrong_details.append({
                         "true": true_name,
                         "predicted": result["full_name"],
@@ -363,6 +382,19 @@ def test_recognition(detector: FaceDetector, embedder: FaceEmbedder):
 
     report.append("=" * 60)
 
+    cls_metrics = classification_metrics(y_true, y_pred)
+    top_confusions = confusion_top_n(y_true, y_pred, top_n=10)
+
+    report.append("\nClassification metrics:")
+    report.append(
+        f"  Macro P/R/F1: {cls_metrics['macro']['precision']:.4f} / "
+        f"{cls_metrics['macro']['recall']:.4f} / {cls_metrics['macro']['f1']:.4f}"
+    )
+    report.append(
+        f"  Weighted P/R/F1: {cls_metrics['weighted']['precision']:.4f} / "
+        f"{cls_metrics['weighted']['recall']:.4f} / {cls_metrics['weighted']['f1']:.4f}"
+    )
+
     report_text = "\n".join(report)
     print(f"\n{report_text}")
 
@@ -370,7 +402,49 @@ def test_recognition(detector: FaceDetector, embedder: FaceEmbedder):
     report_path = PROJECT_ROOT / "benchmark_results.txt"
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(report_text)
+    run_info = {
+        "timestamp": now_utc_iso(),
+        "git_commit": get_git_commit(PROJECT_ROOT),
+        "dataset": "fptudsc/face-celeb-vietnamese or local override",
+        "split_ratio": SPLIT_RATIO,
+        "random_seed": RANDOM_SEED,
+    }
+    model_info = {
+        "recognizer_model": str(FACELIVT_MODEL),
+        "recognizer_sha256": compute_model_sha256(FACELIVT_MODEL),
+        "detector_model": str(YUNET_MODEL),
+        "detector_sha256": compute_model_sha256(YUNET_MODEL),
+        "threshold": RECOGNITION_COSINE_THRESHOLD,
+    }
+    metrics = {
+        "total_test": total,
+        "tested": tested,
+        "correct": correct,
+        "wrong": wrong,
+        "not_found": not_found,
+        "no_face": no_face,
+        "accuracy_top1": (correct / tested) if tested else 0.0,
+    }
+    summary = {
+        "run_info": run_info,
+        "model": model_info,
+        "metrics": metrics,
+        "classification": cls_metrics,
+        "confusion_top_n": top_confusions,
+    }
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    json_path = REPORTS_DIR / f"benchmark_{ts}.json"
+    md_path = REPORTS_DIR / f"benchmark_{ts}.md"
+    csv_path = REPORTS_DIR / f"confusion_topn_{ts}.csv"
+    write_json(json_path, summary)
+    write_markdown(md_path, summary)
+    write_confusion_csv(csv_path, top_confusions)
+
     print(f"\nReport saved to: {report_path}")
+    print(f"JSON report: {json_path}")
+    print(f"Markdown report: {md_path}")
+    print(f"Confusion CSV: {csv_path}")
 
     return accuracy
 
