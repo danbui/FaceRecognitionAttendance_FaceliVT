@@ -93,6 +93,43 @@ python run.py
 
 ---
 
+
+## 🍓 Deploy Raspberry Pi 4 (64-bit mới nhất)
+
+Khuyến nghị dùng **Raspberry Pi OS 64-bit (Bookworm) bản mới nhất** và chạy script cài đặt:
+
+```bash
+git clone <repo-url>
+cd FaceRecognitionAttendance_FaceliVT
+bash scripts/setup_pi.sh
+source venv_pi/bin/activate
+```
+
+### Sửa lỗi ONNX Runtime trên Pi 4
+
+Nếu bạn gặp lỗi khi `import onnxruntime` (ví dụ: `Illegal instruction`, `No matching distribution found`, hoặc lỗi thiếu `libatomic`), làm đúng theo thứ tự sau:
+
+```bash
+# 1) Đảm bảo máy là OS 64-bit
+uname -m
+# Kết quả phải là: aarch64
+
+# 2) Cài dependency hệ thống bắt buộc
+sudo apt-get update
+sudo apt-get install -y libatomic1 python3-venv python3-dev build-essential
+
+# 3) Tạo venv và cài onnxruntime từ piwheels
+python3 -m venv --system-site-packages venv_pi
+source venv_pi/bin/activate
+pip install --upgrade pip setuptools wheel
+pip install --prefer-binary --extra-index-url https://www.piwheels.org/simple onnxruntime==1.18.1
+
+# 4) Verify
+python -c "import onnxruntime as ort; print(ort.__version__, ort.get_available_providers())"
+```
+
+Nếu bước (4) chạy OK, bạn có thể chạy app bình thường.
+
 ## 🛠 Tối Ưu Hóa Dành Cho Raspberry Pi
 
 - Hệ thống hiện tại lưu trữ vector Face Embedding dưới dạng **BLOB trên SQLite** và load toàn bộ lên **RAM Matrix** ở lần khởi động đầu tiên. Việc chấm công hoàn toàn không đọc/ghi đĩa từ thẻ nhớ SD cho đến khi lưu log, giúp tăng tốc độ phản hồi < 0.5s.
