@@ -1,6 +1,7 @@
 """
 Centralized configuration for the Edge Attendance system.
 """
+import os
 from pathlib import Path
 
 # ── Paths ──────────────────────────────────────────────
@@ -17,16 +18,23 @@ YUNET_MODEL = MODELS_DIR / "face_detection_yunet_2023mar.onnx"
 SFACE_MODEL = MODELS_DIR / "face_recognition_sface_2021dec.onnx"
 FACELIVT_MODEL = MODELS_DIR / "facelivtv2_s.onnx"
 
+# ── Face Recognition Backend ──────────────────────────
+# "auto"     = thử FaceLiVT trước, nếu lỗi fallback SFace
+# "facelivt" = ép dùng FaceLiVT (cần ONNX Runtime)
+# "sface"    = ép dùng SFace (chỉ cần OpenCV)
+PREFERRED_BACKEND = os.getenv("FACE_BACKEND", "auto")
+
 # ── Face Detection (YuNet) ─────────────────────────────
 DETECTION_INPUT_SIZE = (320, 320)
 DETECTION_SCORE_THRESHOLD = 0.9
 DETECTION_NMS_THRESHOLD = 0.8
 DETECTION_TOP_K = 5000
 
-# ── Face Recognition ───────────────────────────────────
-# SFace cosine similarity threshold (khuyến nghị từ OpenCV: 0.363)
-# FaceLiVT dùng 0.90 nhưng trên Pi 4 ta dùng SFace
-RECOGNITION_COSINE_THRESHOLD = 0.363
+# ── Face Recognition Thresholds ────────────────────────
+# Mỗi model có cosine similarity range khác nhau → cần threshold riêng
+SFACE_COSINE_THRESHOLD = 0.363       # OpenCV recommend
+FACELIVT_COSINE_THRESHOLD = 0.50     # Tuỳ chỉnh qua benchmark
+RECOGNITION_COSINE_THRESHOLD = 0.363 # Sẽ được cập nhật runtime bởi FaceEmbedder
 
 # ── Kiosk ──────────────────────────────────────────────
 # Time (seconds) face must be stable inside guide box before action

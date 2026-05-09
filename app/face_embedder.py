@@ -1,16 +1,20 @@
 """
 Face embedding – Tự động chọn model phù hợp:
-  1. FaceLiVT (512-dim) via ONNX Runtime – Trên PC có onnxruntime
-  2. SFace (128-dim) via OpenCV FaceRecognizerSF – Trên Raspberry Pi
+  1. FaceLiVT (512-dim) via ONNX Runtime – Ưu tiên (chính xác hơn)
+  2. SFace (128-dim) via OpenCV FaceRecognizerSF – Fallback khi không có ONNX Runtime
 
-Trên Pi 4, ONNX Runtime bị lỗi Illegal Instruction và OpenCV DNN không hỗ trợ
-các toán tử của FaceLiVT (Linear Attention), nên hệ thống tự động dùng SFace.
+Thứ tự ưu tiên mặc định: FaceLiVT → SFace
+Có thể ép backend qua biến môi trường: FACE_BACKEND=sface hoặc FACE_BACKEND=facelivt
 """
 import cv2
 import numpy as np
 from typing import Optional
 
-from .config import FACELIVT_MODEL, SFACE_MODEL
+from . import config
+from .config import (
+    FACELIVT_MODEL, SFACE_MODEL, PREFERRED_BACKEND,
+    SFACE_COSINE_THRESHOLD, FACELIVT_COSINE_THRESHOLD,
+)
 
 # Tọa độ chuẩn 5 điểm cho khung ảnh 112x112 (ArcFace standard)
 ARCFACE_DST = np.array([
@@ -34,8 +38,13 @@ def align_face_arcface(img, landmarks, image_size=112):
 class FaceEmbedder:
     """
     Face embedder tự động chọn backend:
-      - FaceLiVT + ONNX Runtime (PC) → 512-dim
-      - SFace + OpenCV (Raspberry Pi) → 128-dim
+      - FaceLiVT + ONNX Runtime → 512-dim (ưu tiên)
+      - SFace + OpenCV           → 128-dim (fallback)
+
+    Thứ tự được điều khiển bởi config.PREFERRED_BACKEND:
+      - "auto"     → FaceLiVT trước, SFace fallback
+      - "facelivt" → Chỉ FaceLiVT
+      - "sface"    → Chỉ SFace
     """
 
     def __init__(self):
@@ -45,56 +54,104 @@ class FaceEmbedder:
         self.input_name = None
         self.embed_dim = 128  # Mặc định SFace
 
-        # ── Thử SFace trước (ưu tiên cho nhúng) ──
-        if SFACE_MODEL.exists():
-            try:
-                # Thử buffer-based API (OpenCV >= 4.9, cần cho Windows Unicode path)
-                model_buffer = np.fromfile(str(SFACE_MODEL), dtype=np.uint8)
-                config_buffer = np.array([], dtype=np.uint8)
-                self.recognizer = cv2.FaceRecognizerSF.create(
-                    framework="onnx",
-                    bufferModel=model_buffer,
-                    bufferConfig=config_buffer,
-                )
-                self.backend = "sface"
-                self.embed_dim = 128
-                print(f"[FaceEmbedder] Backend: SFace + OpenCV {cv2.__version__} (128-dim, buffer API)")
-                return
-            except TypeError:
-                # OpenCV < 4.9: fallback sang string path API
-                try:
-                    self.recognizer = cv2.FaceRecognizerSF.create(
-                        model=str(SFACE_MODEL),
-                        config="",
+        pref = PREFERRED_BACKEND.lower().strip()
+
+        if pref == "sface":
+            # Ép dùng SFace
+            self._try_sface(required=True)
+        elif pref == "facelivt":
+            # Ép dùng FaceLiVT
+            self._try_facelivt(required=True)
+        else:
+            # Auto: thử FaceLiVT trước, SFace fallback
+            if not self._try_facelivt():
+                if not self._try_sface():
+                    raise RuntimeError(
+                        "Không thể load model nhận diện khuôn mặt nào!\n"
+                        f"  FaceLiVT: {FACELIVT_MODEL} (exists={FACELIVT_MODEL.exists()})\n"
+                        f"  SFace: {SFACE_MODEL} (exists={SFACE_MODEL.exists()})"
                     )
-                    self.backend = "sface"
-                    self.embed_dim = 128
-                    print(f"[FaceEmbedder] Backend: SFace + OpenCV {cv2.__version__} (128-dim, path API)")
-                    return
-                except Exception as e:
-                    print(f"[FaceEmbedder] SFace string-path lỗi: {e}")
-            except Exception as e:
-                print(f"[FaceEmbedder] SFace lỗi: {e}")
 
-        # ── Fallback: FaceLiVT + ONNX Runtime (chỉ trên PC) ──
-        if FACELIVT_MODEL.exists():
-            try:
-                import onnxruntime as ort
-                providers = ['CPUExecutionProvider']
-                self.session = ort.InferenceSession(str(FACELIVT_MODEL), providers=providers)
-                self.input_name = self.session.get_inputs()[0].name
-                self.backend = "facelivt"
-                self.embed_dim = 512
-                print(f"[FaceEmbedder] Backend: FaceLiVT + ONNX Runtime {ort.__version__} (512-dim)")
-                return
-            except Exception as e:
-                print(f"[FaceEmbedder] FaceLiVT không khả dụng: {e}")
+        # ── Cập nhật threshold toàn cục theo backend đang dùng ──
+        if self.backend == "facelivt":
+            config.RECOGNITION_COSINE_THRESHOLD = FACELIVT_COSINE_THRESHOLD
+        else:
+            config.RECOGNITION_COSINE_THRESHOLD = SFACE_COSINE_THRESHOLD
 
-        raise RuntimeError(
-            "Không thể load model nhận diện khuôn mặt nào!\n"
-            f"  SFace: {SFACE_MODEL} (exists={SFACE_MODEL.exists()})\n"
-            f"  FaceLiVT: {FACELIVT_MODEL} (exists={FACELIVT_MODEL.exists()})"
-        )
+        print(f"[FaceEmbedder] Threshold: {config.RECOGNITION_COSINE_THRESHOLD}")
+
+    # ── Backend loaders ───────────────────────────────────
+
+    def _try_facelivt(self, required=False) -> bool:
+        """Thử load FaceLiVT + ONNX Runtime. Trả về True nếu thành công."""
+        if not FACELIVT_MODEL.exists():
+            msg = f"FaceLiVT model không tồn tại: {FACELIVT_MODEL}"
+            if required:
+                raise FileNotFoundError(msg)
+            print(f"[FaceEmbedder] {msg}")
+            return False
+
+        try:
+            import onnxruntime as ort
+            providers = ['CPUExecutionProvider']
+            self.session = ort.InferenceSession(str(FACELIVT_MODEL), providers=providers)
+            self.input_name = self.session.get_inputs()[0].name
+            self.backend = "facelivt"
+            self.embed_dim = 512
+            print(f"[FaceEmbedder] Backend: FaceLiVT + ONNX Runtime {ort.__version__} (512-dim)")
+            return True
+        except Exception as e:
+            msg = f"FaceLiVT không khả dụng: {e}"
+            if required:
+                raise RuntimeError(msg)
+            print(f"[FaceEmbedder] {msg}")
+            return False
+
+    def _try_sface(self, required=False) -> bool:
+        """Thử load SFace + OpenCV. Trả về True nếu thành công."""
+        if not SFACE_MODEL.exists():
+            msg = f"SFace model không tồn tại: {SFACE_MODEL}"
+            if required:
+                raise FileNotFoundError(msg)
+            print(f"[FaceEmbedder] {msg}")
+            return False
+
+        # Thử buffer-based API (OpenCV >= 4.9, cần cho Windows Unicode path)
+        try:
+            model_buffer = np.fromfile(str(SFACE_MODEL), dtype=np.uint8)
+            config_buffer = np.array([], dtype=np.uint8)
+            self.recognizer = cv2.FaceRecognizerSF.create(
+                framework="onnx",
+                bufferModel=model_buffer,
+                bufferConfig=config_buffer,
+            )
+            self.backend = "sface"
+            self.embed_dim = 128
+            print(f"[FaceEmbedder] Backend: SFace + OpenCV {cv2.__version__} (128-dim, buffer API)")
+            return True
+        except TypeError:
+            pass
+        except Exception as e:
+            print(f"[FaceEmbedder] SFace buffer API lỗi: {e}")
+
+        # Fallback: string-path API (OpenCV < 4.9, Pi)
+        try:
+            self.recognizer = cv2.FaceRecognizerSF.create(
+                model=str(SFACE_MODEL),
+                config="",
+            )
+            self.backend = "sface"
+            self.embed_dim = 128
+            print(f"[FaceEmbedder] Backend: SFace + OpenCV {cv2.__version__} (128-dim, path API)")
+            return True
+        except Exception as e:
+            msg = f"SFace lỗi: {e}"
+            if required:
+                raise RuntimeError(msg)
+            print(f"[FaceEmbedder] {msg}")
+            return False
+
+    # ── Public API ────────────────────────────────────────
 
     def get_embedding(self, frame: np.ndarray, face_detection: np.ndarray) -> np.ndarray:
         """Extract face embedding from frame + detection info."""
@@ -106,7 +163,7 @@ class FaceEmbedder:
         else:
             return self._get_embedding_facelivt(frame, face_detection)
 
-    # ── SFace path (OpenCV native – chạy trên Pi) ──
+    # ── SFace path (OpenCV native) ────────────────────────
 
     def _get_embedding_sface(self, frame, face_detection):
         try:
@@ -117,10 +174,11 @@ class FaceEmbedder:
             if norm > 1e-8:
                 emb = emb / norm
             return emb.reshape(1, -1)
-        except Exception:
+        except Exception as e:
+            print(f"[FaceEmbedder] WARNING: SFace embedding failed: {e}")
             return np.zeros((1, 128), dtype=np.float32)
 
-    # ── FaceLiVT path (ONNX Runtime – chạy trên PC) ──
+    # ── FaceLiVT path (ONNX Runtime) ─────────────────────
 
     def _get_embedding_facelivt(self, frame, face_detection):
         try:

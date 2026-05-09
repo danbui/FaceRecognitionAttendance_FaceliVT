@@ -13,7 +13,7 @@ import numpy as np
 import time
 from typing import List, Dict, Any, Optional
 
-from .config import RECOGNITION_COSINE_THRESHOLD
+from . import config
 from .database import load_embeddings
 
 
@@ -70,7 +70,7 @@ embedding_cache = EmbeddingCache()
 
 def match_embedding(
     query_embedding: np.ndarray,
-    threshold: float = RECOGNITION_COSINE_THRESHOLD,
+    threshold: float = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Find the best matching face embedding using vectorized cosine similarity.
@@ -82,6 +82,9 @@ def match_embedding(
     Returns:
         Best matching dict with added 'confidence' key, or None.
     """
+    if threshold is None:
+        threshold = config.RECOGNITION_COSINE_THRESHOLD
+
     rows, matrix = embedding_cache.get()
 
     if matrix is None or len(rows) == 0:
