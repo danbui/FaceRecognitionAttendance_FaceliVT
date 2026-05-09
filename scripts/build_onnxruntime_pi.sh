@@ -15,10 +15,11 @@ sudo apt-get install -y protobuf-compiler libprotobuf-dev libprotoc-dev
 
 # Tăng swap để tránh hết RAM khi biên dịch (Pi 4 chỉ có 4GB)
 echo "[2/5] Tăng swap lên 4GB..."
-sudo dphys-swapfile swapoff
-sudo sed -i 's/CONF_SWAPSIZE=.*/CONF_SWAPSIZE=4096/' /etc/dphys-swapfile
-sudo dphys-swapfile setup
-sudo dphys-swapfile swapon
+sudo swapoff -a 2>/dev/null || true
+sudo fallocate -l 4G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
 echo "  Swap hiện tại: $(free -h | grep Swap | awk '{print $2}')"
 
 # 3. Tải mã nguồn ONNX Runtime
@@ -58,9 +59,9 @@ else
 fi
 
 # Khôi phục swap về mặc định
-echo "Khôi phục swap..."
-sudo sed -i 's/CONF_SWAPSIZE=.*/CONF_SWAPSIZE=256/' /etc/dphys-swapfile
-sudo dphys-swapfile setup
+echo "Dọn dẹp swap tạm..."
+sudo swapoff /swapfile 2>/dev/null || true
+sudo rm -f /swapfile
 
 echo ""
 echo "Sau khi build xong, quay lại thư mục dự án:"
