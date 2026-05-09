@@ -10,7 +10,6 @@ Model: facelivtv2_s.onnx hoặc facelivtv2-xs.onnx
 import cv2
 import numpy as np
 from typing import Optional
-from skimage import transform as trans
 
 from .config import FACELIVT_MODEL
 
@@ -27,14 +26,13 @@ ARCFACE_DST = np.array([
 def align_face_arcface(img, landmarks, image_size=112):
     """
     Căn chỉnh khuôn mặt theo chuẩn InsightFace/ArcFace.
-    Sử dụng skimage.SimilarityTransform (least-squares) thay vì
-    cv2.estimateAffinePartial2D (LMEDS) để khớp chính xác với
-    cách align lúc training FaceLiVT.
+    Dùng cv2.estimateAffinePartial2D (thuần OpenCV, không cần scikit-image).
     """
     dst = ARCFACE_DST * (float(image_size) / 112.0)
-    tform = trans.SimilarityTransform()
-    tform.estimate(landmarks, dst)
-    M = tform.params[0:2, :]
+    M, _ = cv2.estimateAffinePartial2D(landmarks, dst)
+    if M is None:
+        # Fallback nếu không tính được ma trận
+        M = cv2.getAffineTransform(landmarks[:3], dst[:3])
     warped = cv2.warpAffine(img, M, (image_size, image_size), borderValue=0.0)
     return warped
 
