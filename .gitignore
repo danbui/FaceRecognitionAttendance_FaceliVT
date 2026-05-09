@@ -1,0 +1,36 @@
+
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+
+# Captured face images
+captures/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Models (dung lượng lớn, nên tự tải xuống trên Pi)
+models/*.onnx
+models/*.pt
+models/*.data
+
+# Benchmarks data
+benchmarks/data_benchmark/
+dataset_clean/
+data_faces/

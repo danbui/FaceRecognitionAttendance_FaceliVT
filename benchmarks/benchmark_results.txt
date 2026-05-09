@@ -1,0 +1,30 @@
+============================================================
+BENCHMARK RESULTS
+============================================================
+Date:        2026-05-01 17:57:30
+Threshold:   0.363
+Total test:  1801
+No face:     56
+Tested:      1745
+
+  Correct:     1532 (87.8%)
+  Wrong:       208 (11.9%)
+  Not found:   5 (0.3%)
+
+ACCURACY:    87.79%
+
+Confidence (correct): mean=0.6611, min=0.3826, max=0.9996
+Confidence (wrong):   mean=0.5596, min=0.3641, max=1.0000
+
+Top 10 mismatches:
+  ca sĩ Anh Thơ -> ca sĩ Hà Thanh Xuân (conf=0.4103)
+  ca sĩ Bảo Anh -> diễn viên Giang Sơ Ảnh (conf=0.4916)
+  ca sĩ Bảo Thy -> diễn viên Vân Trang (conf=0.4834)
+  ca sĩ Bảo Thy -> diễn viên Nhã Phương (conf=0.5958)
+  ca sĩ Bích Phương -> ca sĩ Suni Hạ Linh (conf=0.4972)
+  ca sĩ Cát Tường -> ca sĩ Vũ Cát Tường (conf=0.5468)
+  ca sĩ Cát Tường -> ca sĩ Vũ Cát Tường (conf=0.5660)
+  ca sĩ Cát Tường -> ca sĩ Vũ Cát Tường (conf=1.0000)
+  ca sĩ Cát Tường -> ca sĩ Vũ Cát Tường (conf=1.0000)
+  ca sĩ Cát Tường -> ca sĩ Vũ Cát Tường (conf=0.7320)
+============================================================
