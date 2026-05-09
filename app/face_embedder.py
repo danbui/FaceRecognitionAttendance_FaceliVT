@@ -1,11 +1,11 @@
 """
-Face embedding using ONNX Runtime with FaceLiVT model.
+Face embedding using FaceLiVT model.
 
-FaceLiVT produces a 512-dimensional face embedding vector from a 112x112 face image.
-Because FaceLiVT uses advanced layers (Linear Attention) that OpenCV DNN doesn't support,
-we use the official ONNX Runtime engine.
+Hỗ trợ 2 backend:
+  1. ONNX Runtime (ưu tiên, nhanh hơn trên PC)
+  2. OpenCV DNN (fallback, chạy được trên MỌI thiết bị ARM/Pi mà không cần onnxruntime)
 
-Model: facelivtv2-xs.onnx
+Model: facelivtv2_s.onnx hoặc facelivtv2-xs.onnx
 """
 import cv2
 import numpy as np
@@ -41,7 +41,8 @@ def align_face_arcface(img, landmarks, image_size=112):
 
 class FaceEmbedder:
     """
-    Face embedder using FaceLiVT via ONNX Runtime.
+    Face embedder using FaceLiVT.
+    Tự động chọn backend: ONNX Runtime (nếu có) hoặc OpenCV DNN (fallback cho Pi).
     """
 
     def __init__(self):
@@ -49,18 +50,39 @@ class FaceEmbedder:
         if not FACELIVT_MODEL.exists():
             raise FileNotFoundError(
                 f"FaceLiVT model not found at {model_path}. "
-                "Please run scripts/convert_facelivt_onnx.py to convert the .pt model."
+                "Please copy the .onnx model file to the models/ directory."
             )
 
+        self.backend = None
+        self.session = None
+        self.net = None
+        self.input_name = None
+
+        # Thử dùng ONNX Runtime trước (nhanh hơn trên PC)
         try:
             import onnxruntime as ort
-        except ImportError:
-            raise ImportError("Please install onnxruntime using: pip install onnxruntime")
+            providers = ['CPUExecutionProvider']
+            self.session = ort.InferenceSession(model_path, providers=providers)
+            self.input_name = self.session.get_inputs()[0].name
+            self.backend = "onnxruntime"
+            print(f"[FaceEmbedder] Backend: ONNX Runtime {ort.__version__}")
+        except Exception as e:
+            print(f"[FaceEmbedder] ONNX Runtime không khả dụng ({e})")
+            print(f"[FaceEmbedder] Chuyển sang dùng OpenCV DNN...")
 
-        # onnxruntime supports Unicode paths perfectly
-        providers = ['CPUExecutionProvider']
-        self.session = ort.InferenceSession(model_path, providers=providers)
-        self.input_name = self.session.get_inputs()[0].name
+            # Fallback: dùng OpenCV DNN (chạy được trên mọi ARM/Pi)
+            try:
+                # Đọc file model vào bộ nhớ để tránh lỗi Unicode path trên Windows
+                model_buffer = np.fromfile(model_path, dtype=np.uint8)
+                self.net = cv2.dnn.readNetFromONNX(model_buffer)
+                self.backend = "opencv_dnn"
+                print(f"[FaceEmbedder] Backend: OpenCV DNN {cv2.__version__}")
+            except Exception as e2:
+                raise RuntimeError(
+                    f"Không thể load model FaceLiVT bằng cả ONNX Runtime lẫn OpenCV DNN.\n"
+                    f"  ONNX Runtime error: {e}\n"
+                    f"  OpenCV DNN error: {e2}"
+                )
 
     def get_embedding(self, frame: np.ndarray, face_detection: np.ndarray) -> np.ndarray:
         """
@@ -107,8 +129,14 @@ class FaceEmbedder:
         # Add batch dimension (1, C, H, W)
         blob = np.expand_dims(blob, axis=0)
         
-        # Run inference via ONNX Runtime
-        out = self.session.run(None, {self.input_name: blob})[0]
+        # ── Chạy inference tùy theo backend ──
+        if self.backend == "onnxruntime":
+            out = self.session.run(None, {self.input_name: blob})[0]
+        else:
+            # OpenCV DNN
+            self.net.setInput(blob)
+            out = self.net.forward()
+        
         embedding = out.flatten()
         
         # L2-normalize so that Cosine Similarity = Dot Product
