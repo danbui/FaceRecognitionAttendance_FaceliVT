@@ -39,20 +39,30 @@ class FaceDetector:
                 "Run: python download_models.py"
             )
 
-        # Read model into memory buffer to avoid OpenCV Unicode path
-        # issues on Windows (Vietnamese characters in folder names).
-        model_buffer = np.fromfile(str(model_path), dtype=np.uint8)
-        config_buffer = np.array([], dtype=np.uint8)
-
-        self.detector = cv2.FaceDetectorYN.create(
-            framework="onnx",
-            bufferModel=model_buffer,
-            bufferConfig=config_buffer,
-            input_size=DETECTION_INPUT_SIZE,
-            score_threshold=DETECTION_SCORE_THRESHOLD,
-            nms_threshold=DETECTION_NMS_THRESHOLD,
-            top_k=DETECTION_TOP_K,
-        )
+        # Thử buffer-based API trước (OpenCV >= 4.9, cần cho Windows Unicode path).
+        # Nếu lỗi (OpenCV cũ trên Pi), fallback sang string-path API.
+        try:
+            model_buffer = np.fromfile(model_path, dtype=np.uint8)
+            config_buffer = np.array([], dtype=np.uint8)
+            self.detector = cv2.FaceDetectorYN.create(
+                framework="onnx",
+                bufferModel=model_buffer,
+                bufferConfig=config_buffer,
+                input_size=DETECTION_INPUT_SIZE,
+                score_threshold=DETECTION_SCORE_THRESHOLD,
+                nms_threshold=DETECTION_NMS_THRESHOLD,
+                top_k=DETECTION_TOP_K,
+            )
+        except TypeError:
+            # OpenCV < 4.9: dùng string path thay vì buffer
+            self.detector = cv2.FaceDetectorYN.create(
+                model=model_path,
+                config="",
+                input_size=DETECTION_INPUT_SIZE,
+                score_threshold=DETECTION_SCORE_THRESHOLD,
+                nms_threshold=DETECTION_NMS_THRESHOLD,
+                top_k=DETECTION_TOP_K,
+            )
 
     def detect_all(self, frame: np.ndarray) -> Optional[np.ndarray]:
         """

@@ -48,6 +48,7 @@ class FaceEmbedder:
         # ── Thử SFace trước (ưu tiên cho nhúng) ──
         if SFACE_MODEL.exists():
             try:
+                # Thử buffer-based API (OpenCV >= 4.9, cần cho Windows Unicode path)
                 model_buffer = np.fromfile(str(SFACE_MODEL), dtype=np.uint8)
                 config_buffer = np.array([], dtype=np.uint8)
                 self.recognizer = cv2.FaceRecognizerSF.create(
@@ -57,8 +58,21 @@ class FaceEmbedder:
                 )
                 self.backend = "sface"
                 self.embed_dim = 128
-                print(f"[FaceEmbedder] Backend: SFace + OpenCV {cv2.__version__} (128-dim)")
+                print(f"[FaceEmbedder] Backend: SFace + OpenCV {cv2.__version__} (128-dim, buffer API)")
                 return
+            except TypeError:
+                # OpenCV < 4.9: fallback sang string path API
+                try:
+                    self.recognizer = cv2.FaceRecognizerSF.create(
+                        model=str(SFACE_MODEL),
+                        config="",
+                    )
+                    self.backend = "sface"
+                    self.embed_dim = 128
+                    print(f"[FaceEmbedder] Backend: SFace + OpenCV {cv2.__version__} (128-dim, path API)")
+                    return
+                except Exception as e:
+                    print(f"[FaceEmbedder] SFace string-path lỗi: {e}")
             except Exception as e:
                 print(f"[FaceEmbedder] SFace lỗi: {e}")
 
