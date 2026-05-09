@@ -22,13 +22,14 @@ class EmbeddingCache:
     In-memory cache for face embeddings.
 
     Loads all embeddings from SQLite once and stores them as a pre-built
-    NumPy matrix (N, 128) for vectorized matching.  Call invalidate()
+    NumPy matrix (N, D) for vectorized matching (D=128 for SFace, 512 for FaceLiVT).
+    Call invalidate()
     after enrolling a new employee to force a reload on next match.
     """
 
     def __init__(self):
         self._rows: List[Dict[str, Any]] = []
-        self._matrix: Optional[np.ndarray] = None   # shape (N, 128)
+        self._matrix: Optional[np.ndarray] = None   # shape (N, D)
         self._dirty: bool = True                      # needs reload
         self._last_load: float = 0.0
 
@@ -49,7 +50,7 @@ class EmbeddingCache:
     def _reload(self):
         self._rows = load_embeddings()
         if self._rows:
-            # Stack all (1, 128) arrays into (N, 128) matrix
+            # Stack all (1, D) arrays into (N, D) matrix
             self._matrix = np.vstack(
                 [r["embedding"].reshape(1, -1) for r in self._rows]
             ).astype(np.float32)
@@ -75,7 +76,7 @@ def match_embedding(
     Find the best matching face embedding using vectorized cosine similarity.
 
     Args:
-        query_embedding: numpy array shape (1, 128) from FaceEmbedder.
+        query_embedding: numpy array shape (1, D) from FaceEmbedder (D=128 or 512).
         threshold: Minimum cosine similarity to consider a match.
 
     Returns:

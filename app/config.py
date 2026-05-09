@@ -23,10 +23,10 @@ DETECTION_SCORE_THRESHOLD = 0.9
 DETECTION_NMS_THRESHOLD = 0.8
 DETECTION_TOP_K = 5000
 
-# ── Face Recognition (FaceLiVT) ────────────────────────
-# FaceLiVT cosine similarity threshold
-# Threshold requires tuning, 0.45 is a safe starting point for highly discriminative models
-RECOGNITION_COSINE_THRESHOLD = 0.90
+# ── Face Recognition ───────────────────────────────────
+# SFace cosine similarity threshold (khuyến nghị từ OpenCV: 0.363)
+# FaceLiVT dùng 0.90 nhưng trên Pi 4 ta dùng SFace
+RECOGNITION_COSINE_THRESHOLD = 0.363
 
 # ── Kiosk ──────────────────────────────────────────────
 # Time (seconds) face must be stable inside guide box before action
