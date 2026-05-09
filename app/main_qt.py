@@ -190,7 +190,11 @@ class KioskWindow(QMainWindow):
 
         # Init components
         init_db()
-        self.cam_service = CameraService(args.camera, demo=args.demo).start()
+        self.cam_service = CameraService(
+            camera_index=args.camera, 
+            source=args.source, 
+            demo=args.demo
+        ).start()
         self.embedder = FaceEmbedder()
         self.frame_selector = BestFrameSelector()
         
@@ -596,7 +600,8 @@ class KioskWindow(QMainWindow):
 
 def main():
     parser = argparse.ArgumentParser(description="Edge Attendance Kiosk (Qt Version)")
-    parser.add_argument("--camera", type=int, default=0, help="Camera index")
+    parser.add_argument("--camera", type=int, default=0, help="Camera index cho USB camera (Mặc định: 0)")
+    parser.add_argument("--source", type=str, choices=["auto", "picam", "usb"], default="auto", help="Nguồn camera: auto, picam, usb")
     parser.add_argument("--demo", action="store_true", help="Run without camera")
     args = parser.parse_args()
 

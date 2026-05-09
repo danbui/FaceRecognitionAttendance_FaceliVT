@@ -21,8 +21,9 @@ except ImportError:
 
 
 class CameraService:
-    def __init__(self, camera_index: int = 0, demo: bool = False):
+    def __init__(self, camera_index: int = 0, source: str = "auto", demo: bool = False):
         self.camera_index = camera_index
+        self.source = source
         self.demo = demo
         self.cap = None
         self.picam = None
@@ -32,8 +33,8 @@ class CameraService:
         if self.demo:
             return self
 
-        # Try Pi Camera first
-        if HAS_PICAMERA:
+        # 1. Thử dùng Pi Camera nếu source là auto hoặc picam
+        if self.source in ("auto", "picam") and HAS_PICAMERA:
             try:
                 self.picam = Picamera2()
                 config = self.picam.create_preview_configuration(
@@ -42,21 +43,26 @@ class CameraService:
                 self.picam.configure(config)
                 self.picam.start()
                 self.using_picamera = True
-                print("[Camera] Using Pi Camera (picamera2)")
+                print("[Camera] Đang sử dụng Pi Camera (picamera2)")
                 return self
             except Exception as e:
-                print(f"[Camera] Pi Camera failed: {e}, falling back to USB camera")
+                print(f"[Camera] Lỗi khởi động Pi Camera: {e}")
                 self.picam = None
+                if self.source == "picam":
+                    raise RuntimeError("Bắt buộc dùng Pi Camera nhưng khởi động thất bại!")
 
-        # Fallback to USB / laptop camera
+        # 2. Chuyển sang USB Camera (hoặc ép dùng USB nếu source == "usb")
+        if self.source == "picam":
+            raise RuntimeError("Hệ thống không tìm thấy thư viện picamera2 cho Pi Camera!")
+
         self.cap = cv2.VideoCapture(self.camera_index)
         if not self.cap.isOpened():
             raise RuntimeError(
-                "Cannot open camera. Check connection or try --demo mode."
+                f"Không thể mở USB camera ở cổng (index = {self.camera_index}). Hãy kiểm tra lại cắm cáp."
             )
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
-        print(f"[Camera] Using USB/laptop camera index {self.camera_index}")
+        print(f"[Camera] Đang sử dụng USB Camera (index = {self.camera_index})")
         return self
 
     def frames(self) -> Iterator[np.ndarray]:
