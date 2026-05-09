@@ -11,8 +11,9 @@ sudo apt-get update
 echo "[2/5] Cài đặt PyQt5 và OpenCV Dependencies..."
 # Bắt buộc cài PyQt5 bằng apt để tránh lỗi biên dịch C++ mất 40 phút trên Pi
 sudo apt-get install -y python3-pyqt5 python3-pyqt5.qtmultimedia
-# Các thư viện phụ trợ cho OpenCV
+# Các thư viện phụ trợ cho OpenCV và thư viện vẽ giao diện X11/XCB/Wayland (Sửa lỗi Qt platform xcb)
 sudo apt-get install -y libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev
+sudo apt-get install -y libxcb-xinerama0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 qtwayland5
 # Công cụ tạo môi trường ảo Python
 sudo apt-get install -y python3-venv python3-dev build-essential
 
