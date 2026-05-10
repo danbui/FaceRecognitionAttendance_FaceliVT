@@ -96,9 +96,15 @@ class FaceEmbedder:
             providers = ['CPUExecutionProvider']
             self.session = ort.InferenceSession(str(FACELIVT_MODEL), providers=providers)
             self.input_name = self.session.get_inputs()[0].name
+
+            # Auto-detect output dimension từ model (có thể là 512 hoặc 1284)
+            dummy = np.random.randn(1, 3, 112, 112).astype(np.float32)
+            out = self.session.run(None, {self.input_name: dummy})[0]
+            actual_dim = out.flatten().shape[0]
+
             self.backend = "facelivt"
-            self.embed_dim = 512
-            print(f"[FaceEmbedder] Backend: FaceLiVT + ONNX Runtime {ort.__version__} (512-dim)")
+            self.embed_dim = actual_dim
+            print(f"[FaceEmbedder] Backend: FaceLiVT + ONNX Runtime {ort.__version__} ({actual_dim}-dim)")
             return True
         except Exception as e:
             msg = f"FaceLiVT không khả dụng: {e}"
@@ -191,7 +197,7 @@ class FaceEmbedder:
                 face_crop = cv2.resize(face_crop, (112, 112))
 
         if face_crop is None or face_crop.size == 0:
-            return np.zeros((1, 512), dtype=np.float32)
+            return np.zeros((1, self.embed_dim), dtype=np.float32)
 
         return self._infer_facelivt(face_crop)
 
