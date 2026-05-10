@@ -97,8 +97,16 @@ def match_embedding(
         return None
     query = query / q_norm
 
+    # ── Kiểm tra dimension ──
+    # Nếu DB chứa embedding cũ (128-dim) mà model mới là 512-dim → không match được
+    if matrix.shape[1] != query.shape[0]:
+        print(f"[Matcher] WARNING: Dimension mismatch! "
+              f"DB embeddings={matrix.shape[1]}-dim, query={query.shape[0]}-dim. "
+              f"Cần xóa DB cũ và enroll lại với model mới.")
+        return None
+
     # ── Vectorized cosine similarity in one shot ──
-    # matrix is (N, 128/512), query is (128/512,) → scores is (N,)
+    # matrix is (N, D), query is (D,) → scores is (N,)
     scores = matrix @ query
 
     # ── Thuật toán KNN Top-5 (K-Nearest Neighbors) ──
