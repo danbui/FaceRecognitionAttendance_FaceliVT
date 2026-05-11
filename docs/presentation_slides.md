@@ -189,7 +189,8 @@
 |---|---|---|---|
 | Số chiều embedding | 128 | 512 | 512 |
 | Dung lượng model | ~37 MB | ~17 MB | ~5 MB |
-| Tốc độ (Pi 4) | ~40ms | ~80ms | ~60ms |
+| Tốc độ (PC/x86) | ~42ms (~23 FPS) | **~15ms (~67 FPS)** | ~22ms (~46 FPS) |
+| Tốc độ (Pi 4/ARM) | ~40ms | ~80ms | ~60ms |
 | Dependency | OpenCV (sẵn có) | ONNX Runtime | ONNX Runtime |
 
 *   **SFace:** Nhỏ gọn, chạy trực tiếp trên OpenCV. Tốc độ cực nhanh, phù hợp CSDL nhỏ.
@@ -197,29 +198,36 @@
 *   **FaceLiVT v2-S (INT8):** Phiên bản lượng tử hóa (Quantized) giúp giảm dung lượng ~70%, tăng tốc inference, đánh đổi một phần accuracy.
 
 ### Slide 25: ⚡ Benchmark Accuracy tại Ngưỡng Tối Ưu
-*   **Tập benchmark:** 3068 cặp so sánh trên VN-celeb dataset. Threshold tìm tự động bằng `sweep_threshold.py`.
+*   **Tập benchmark:** dataset_clean — 224 người, 957 probe images. Threshold tìm tự động bằng `sweep_both_models.py`.
 
 | Metric | SFace (128d) | FaceLiVT2\_S FP32 (512d) | FaceLiVT2\_S INT8 (512d) |
 |---|:---:|:---:|:---:|
-| **Threshold tối ưu** | 0.400 | 0.250 | 0.100 |
-| **Accuracy** | **92.54%** | 89.96% | 88.01% |
-| **FAR (nhầm người)** | **7.24%** | 9.71% | 11.99% |
-| **FRR (từ chối sai)** | 0.23% | 0.33% | **0.00%** |
-| Correct / Total | 2839 / 3068 | 2760 / 3068 | 2700 / 3068 |
-| Wrong (nhầm) | 222 | 298 | 368 |
-| Unknown (dưới thr) | 7 | 10 | 0 |
+| **Threshold tối ưu** | 0.400 | 0.200 | 0.200 |
+| **Accuracy** | **90.28%** | 89.86% | 87.77% |
+| **FAR (nhầm người)** | **9.09%** | 9.93% | 12.12% |
+| **FRR (từ chối sai)** | 0.63% | 0.21% | **0.10%** |
+| Correct / Total | 864 / 957 | 860 / 957 | 840 / 957 |
+| Wrong (nhầm) | 87 | 95 | 116 |
+| Unknown (dưới thr) | 6 | 2 | 1 |
 
 *   **Nhận xét:**
-    *   SFace đạt accuracy cao nhất (92.54%) với FAR thấp nhất (7.24%).
-    *   FaceLiVT2_S FP32 hoạt động tốt ở ngưỡng thấp hơn (0.250).
-    *   INT8 quantize giảm ~2% accuracy nhưng FRR = 0% (không từ chối sai bất kỳ ai).
+    *   🏆 SFace đạt accuracy cao nhất (90.28%) với FAR thấp nhất (9.09%).
+    *   FaceLiVT2_S FP32 gần sát (89.86%) với FRR rất thấp (0.21%) — ít từ chối sai.
+    *   INT8 quantize mất ~2% accuracy nhưng model nhỏ hơn ~70%.
 
 ### Slide 26: Benchmark Hiệu năng (Latency & FPS)
-*   Hệ thống có bộ script benchmark đo kiểm nghiêm ngặt:
-    *   Phát hiện mặt & Căn chỉnh mất < 15ms.
-    *   FaceLiVT Inference: ~30ms (Trên PC) / ~80ms (Trên Pi).
-    *   SFace Inference: ~10ms (Trên PC) / ~40ms (Trên Pi).
-    *   Tổng thể Pipeline: SFace chạy được ~20 FPS, FaceLiVT ~11 FPS. Hoàn toàn đáp ứng yêu cầu Real-time.
+*   Đo trên PC (Windows 10, AMD64, ONNX Runtime 1.20) với 500 ảnh từ dataset_clean:
+
+| Bước | SFace (128d) | FaceLiVT FP32 (512d) | FaceLiVT INT8 (512d) |
+|---|:---:|:---:|:---:|
+| Detection (YuNet) | 4.6ms | 4.6ms | 4.6ms |
+| Embedding | 37.9ms | **10.3ms** | 17.2ms |
+| KNN Matching | 0.1ms | 0.2ms | 0.2ms |
+| **Tổng Pipeline** | **42.6ms (~23 FPS)** | **15.0ms (~67 FPS)** | **21.9ms (~46 FPS)** |
+
+*   🏆 **FaceLiVT FP32 nhanh nhất** trên PC: nhanh hơn SFace **2.8x** nhờ ONNX Runtime tận dụng AVX2/AVX-512.
+*   Trên Pi 4 (ARM): SFace nhanh hơn (~40ms vs ~80ms) do OpenCV DNN tối ưu tốt cho ARM NEON.
+*   Cả 3 model đều đạt **Real-time** (> 20 FPS) trên cả PC lẫn Pi.
 
 ---
 
