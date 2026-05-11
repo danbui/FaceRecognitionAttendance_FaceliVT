@@ -1,0 +1,17 @@
+=================================================================
+  BENCHMARK LATENCY: SFace vs FaceLiVT
+=================================================================
+  Thời gian : 2026-05-10 10:50:51
+  Platform  : Windows-10-10.0.19045-SP0
+  Machine   : AMD64
+  OpenCV    : 4.13.0
+  ONNX RT   : 1.20.0
+  Dataset   : D:\DAN\2. DAN\Bài tập\TTNT cho hệ thống nhúng\Đồ án hệ thống nhúng\FaceRecognitionAttendance\dataset_clean (200 ảnh)
+-----------------------------------------------------------------
+  Detection       SFace=6.4ms  FaceLiVT=5.6ms  Δ=-0.7ms
+  BestFrame       SFace=1.1ms  FaceLiVT=0.8ms  Δ=-0.3ms
+  Embedding       SFace=31.5ms  FaceLiVT=16.0ms  Δ=-15.5ms
+  TOTAL           SFace=38.9ms  FaceLiVT=22.4ms  Δ=-16.5ms
+=================================================================
+  SFace (128d) throughput:    ~26 FPS
+  FaceLiVT (1284d) throughput: ~45 FPS

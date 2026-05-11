@@ -12,10 +12,10 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BASE_DIR))  # Allow importing from models/
 
-MODEL_PATH_PT = BASE_DIR / "models" / "facelivtv2-xs.pt"
-MODEL_PATH_ONNX = BASE_DIR / "models" / "facelivtv2-xs.onnx"
+MODEL_PATH_PT = BASE_DIR / "models" / "facelivtv2_s.pt"
+MODEL_PATH_ONNX = BASE_DIR / "models" / "facelivtv2_s_512.onnx"
 
-from models.facelivtv2 import facelivtv2_xs, reparameterize
+from models.facelivtv2 import facelivtv2_s, reparameterize
 
 def main():
     if not MODEL_PATH_PT.exists():
@@ -26,7 +26,7 @@ def main():
     
     try:
         # Create the model architecture
-        model = facelivtv2_xs(num_classes=512)
+        model = facelivtv2_s(num_classes=512)
         
         # Load the weights (state_dict)
         state_dict = torch.load(str(MODEL_PATH_PT), map_location="cpu")
@@ -61,7 +61,7 @@ def main():
             dummy_input, 
             str(MODEL_PATH_ONNX),
             export_params=True,
-            opset_version=13,  # Opset 13 is highly compatible and no longer has the Split bug
+            opset_version=18,  # PyTorch >= 2.x yêu cầu tối thiểu opset 18
             do_constant_folding=True,
             input_names=['input'],
             output_names=['output']

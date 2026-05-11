@@ -1,5 +1,5 @@
 """
-Confusion Matrix & Accuracy Report — So sánh SFace vs FaceLiVT.
+Confusion Matrix & Accuracy Report — So sánh SFace vs FaceLiVT FP32 vs FaceLiVT INT8.
 
 Tách dataset_clean thành 80% gallery + 20% probe (test).
 Enroll gallery → test probe → xuất confusion matrix + metrics.
@@ -31,7 +31,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.face_detector import FaceDetector
-from app.config import SFACE_MODEL, FACELIVT_MODEL
+from app.config import SFACE_MODEL, FACELIVT_MODEL, MODELS_DIR
+
+FACELIVT_INT8_MODEL = MODELS_DIR / "facelivtv2_s_512_int8.onnx"
 
 DATASET_DIR = PROJECT_ROOT / "dataset_clean"
 IMG_EXTS = {".jpg", ".jpeg", ".png"}
@@ -93,10 +95,33 @@ class SFaceEmb:
 
 
 class FaceLiVTEmb:
-    name = "FaceLiVT"
+    name = "FaceLiVT2_S_FP32"
     def __init__(self):
         import onnxruntime as ort
         self.sess = ort.InferenceSession(str(FACELIVT_MODEL), providers=['CPUExecutionProvider'])
+        self.inp = self.sess.get_inputs()[0].name
+        dummy = np.random.randn(1, 3, 112, 112).astype(np.float32)
+        self.embed_dim = self.sess.run(None, {self.inp: dummy})[0].flatten().shape[0]
+
+    def get_embedding(self, frame, det):
+        face = align_face(frame, det)
+        if face is None:
+            return np.zeros(self.embed_dim, dtype=np.float32)
+        rgb = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
+        blob = (rgb.astype(np.float32) - 127.5) / 127.5
+        blob = np.transpose(blob, (2, 0, 1))[np.newaxis, ...]
+        emb = self.sess.run(None, {self.inp: blob})[0].flatten()
+        n = np.linalg.norm(emb)
+        return emb / n if n > 1e-8 else emb
+
+
+class FaceLiVTInt8Emb:
+    name = "FaceLiVT2_S_INT8"
+    def __init__(self):
+        import onnxruntime as ort
+        if not FACELIVT_INT8_MODEL.exists():
+            raise FileNotFoundError(f"INT8 model không tồn tại: {FACELIVT_INT8_MODEL}")
+        self.sess = ort.InferenceSession(str(FACELIVT_INT8_MODEL), providers=['CPUExecutionProvider'])
         self.inp = self.sess.get_inputs()[0].name
         dummy = np.random.randn(1, 3, 112, 112).astype(np.float32)
         self.embed_dim = self.sess.run(None, {self.inp: dummy})[0].flatten().shape[0]
@@ -321,7 +346,7 @@ def main():
     out_dir.mkdir(exist_ok=True)
 
     print("=" * 70)
-    print("  📊 Confusion Matrix & Accuracy: SFace vs FaceLiVT")
+    print("  📊 Confusion Matrix & Accuracy: SFace vs FaceLiVT FP32 vs INT8")
     print("=" * 70)
 
     detector = FaceDetector()
@@ -336,12 +361,22 @@ def main():
 
     results = {}
 
-    for EmbClass, threshold in [(SFaceEmb, args.sface_threshold), (FaceLiVTEmb, args.facelivt_threshold)]:
-        emb = EmbClass()
+    model_configs = [
+        (SFaceEmb,        args.sface_threshold),
+        (FaceLiVTEmb,     args.facelivt_threshold),
+        (FaceLiVTInt8Emb, args.facelivt_threshold),
+    ]
+
+    for step, (EmbClass, threshold) in enumerate(model_configs, start=1):
+        try:
+            emb = EmbClass()
+        except Exception as e:
+            print(f"\n  ⚠️ Bỏ qua {EmbClass.name}: {e}")
+            continue
         name = emb.name
         dim = emb.embed_dim
 
-        print(f"\n[{'3' if name=='SFace' else '5'}/6] {name} ({dim}-dim, threshold={threshold})...")
+        print(f"\n[{step}/{len(model_configs)}] {name} ({dim}-dim, threshold={threshold})...")
 
         # Enroll
         print(f"  Enrolling gallery...")
@@ -366,34 +401,55 @@ def main():
         print(f"  → Accuracy: {metrics['accuracy']:.2f}%  FAR: {metrics['far']:.2f}%  FRR: {metrics['frr']:.2f}%")
 
         # Plot
+        slug = name.lower().replace(" ", "_")
         plot_confusion_matrix(
             metrics["cm"], labels,
             f"Confusion Matrix — {name} ({dim}-dim, thr={threshold})",
-            out_dir / f"confusion_{name.lower()}.png"
+            out_dir / f"confusion_{slug}.png"
         )
 
     # ═══════════════════════════════════════════════════════
     #  Bảng so sánh
     # ═══════════════════════════════════════════════════════
-    print(f"\n{'='*70}")
+    print(f"\n{'='*90}")
     print(f"  BẢNG SO SÁNH ACCURACY")
-    print(f"{'='*70}")
-    s, f = results.get("SFace", {}), results.get("FaceLiVT", {})
-    print(f"  {'Metric':<25} │ {'SFace ('+str(s.get('dim',''))+'d)':>18} │ {'FaceLiVT ('+str(f.get('dim',''))+'d)':>18}")
-    print(f"  {'─'*25}─┼─{'─'*18}─┼─{'─'*18}")
+    print(f"{'='*90}")
+    s = results.get("SFace", {})
+    f = results.get("FaceLiVT2_S_FP32", {})
+    q = results.get("FaceLiVT2_S_INT8", {})
+    col_s = f"SFace ({s.get('dim','')}d)"
+    col_f = f"FaceLiVT2_S_FP32 ({f.get('dim','')}d)"
+    col_q = f"FaceLiVT2_S_INT8 ({q.get('dim','')}d)"
+    print(f"  {'Metric':<25} │ {col_s:>22} │ {col_f:>22} │ {col_q:>22}")
+    print(f"  {'─'*25}─┼─{'─'*22}─┼─{'─'*22}─┼─{'─'*22}")
     rows = [
-        ("Threshold", f"{s.get('threshold',0):.3f}", f"{f.get('threshold',0):.3f}"),
-        ("Accuracy (%)", f"{s.get('accuracy',0):.2f}%", f"{f.get('accuracy',0):.2f}%"),
-        ("FAR — False Accept (%)", f"{s.get('far',0):.2f}%", f"{f.get('far',0):.2f}%"),
-        ("FRR — False Reject (%)", f"{s.get('frr',0):.2f}%", f"{f.get('frr',0):.2f}%"),
-        ("Correct / Total", f"{s.get('correct',0)}/{s.get('total',0)}", f"{f.get('correct',0)}/{f.get('total',0)}"),
-        ("Wrong (nhầm người)", str(s.get('wrong',0)), str(f.get('wrong',0))),
-        ("Unknown (dưới thr)", str(s.get('unknown',0)), str(f.get('unknown',0))),
-        ("No face detected", str(s.get('no_face',0)), str(f.get('no_face',0))),
+        ("Threshold",
+         f"{s.get('threshold',0):.3f}", f"{f.get('threshold',0):.3f}", f"{q.get('threshold',0):.3f}"),
+        ("Accuracy (%)",
+         f"{s.get('accuracy',0):.2f}%", f"{f.get('accuracy',0):.2f}%", f"{q.get('accuracy',0):.2f}%"),
+        ("FAR — False Accept (%)",
+         f"{s.get('far',0):.2f}%", f"{f.get('far',0):.2f}%", f"{q.get('far',0):.2f}%"),
+        ("FRR — False Reject (%)",
+         f"{s.get('frr',0):.2f}%", f"{f.get('frr',0):.2f}%", f"{q.get('frr',0):.2f}%"),
+        ("Correct / Total",
+         f"{s.get('correct',0)}/{s.get('total',0)}",
+         f"{f.get('correct',0)}/{f.get('total',0)}",
+         f"{q.get('correct',0)}/{q.get('total',0)}"),
+        ("Wrong (nhầm người)",
+         str(s.get('wrong',0)), str(f.get('wrong',0)), str(q.get('wrong',0))),
+        ("Unknown (dưới thr)",
+         str(s.get('unknown',0)), str(f.get('unknown',0)), str(q.get('unknown',0))),
+        ("No face detected",
+         str(s.get('no_face',0)), str(f.get('no_face',0)), str(q.get('no_face',0))),
+        ("Enroll time (s)",
+         f"{s.get('enroll_time',0):.1f}", f"{f.get('enroll_time',0):.1f}", f"{q.get('enroll_time',0):.1f}"),
+        ("Test time (s)",
+         f"{s.get('test_time',0):.1f}", f"{f.get('test_time',0):.1f}", f"{q.get('test_time',0):.1f}"),
     ]
-    for label, sv, fv in rows:
-        print(f"  {label:<25} │ {sv:>18} │ {fv:>18}")
-    print(f"{'='*70}")
+    for row in rows:
+        label, sv, fv, qv = row
+        print(f"  {label:<25} │ {sv:>22} │ {fv:>22} │ {qv:>22}")
+    print(f"{'='*90}")
 
     # Save text report
     report_path = out_dir / f"accuracy_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
@@ -401,13 +457,16 @@ def main():
         fh.write(f"Accuracy Report — {datetime.now()}\n")
         fh.write(f"Dataset: {ds}\n")
         fh.write(f"People: {len(labels)}, Gallery: {n_gallery}, Probe: {n_probe}\n\n")
-        for name in ["SFace", "FaceLiVT"]:
+        for name in ["SFace", "FaceLiVT2_S_FP32", "FaceLiVT2_S_INT8"]:
             m = results.get(name, {})
+            if not m:
+                continue
             fh.write(f"{name} ({m.get('dim','')}d, thr={m.get('threshold','')}):\n")
             fh.write(f"  Accuracy: {m.get('accuracy',0):.2f}%\n")
             fh.write(f"  FAR: {m.get('far',0):.2f}%  FRR: {m.get('frr',0):.2f}%\n")
             fh.write(f"  Correct={m.get('correct',0)} Wrong={m.get('wrong',0)} "
-                     f"Unknown={m.get('unknown',0)} NoFace={m.get('no_face',0)}\n\n")
+                     f"Unknown={m.get('unknown',0)} NoFace={m.get('no_face',0)}\n")
+            fh.write(f"  Enroll: {m.get('enroll_time',0):.1f}s  Test: {m.get('test_time',0):.1f}s\n\n")
     print(f"\n  📄 Report: {report_path}")
     print(f"  ✅ Hoàn tất!")
 

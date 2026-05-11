@@ -1,0 +1,21 @@
+============================================================
+  BENCHMARK LATENCY REPORT
+============================================================
+  Thời gian  : 2026-05-10 10:17:06
+  Platform   : Windows-10-10.0.19045-SP0
+  Machine    : AMD64
+  Backend    : FACELIVT (512-dim)
+  OpenCV     : 4.13.0
+  ONNX RT    : 1.20.0
+  Source     : D:\DAN\2. DAN\Bài tập\TTNT cho hệ thống nhúng\Đồ án hệ thống nhúng\FaceRecognitionAttendance\dataset_clean
+  Tổng ảnh   : 5270
+  Có mặt     : 5216 (99.0%)
+------------------------------------------------------------
+  Face Detection (YuNet)              mean=9.11ms  median=8.00ms  p95=15.22ms
+  Best Frame Selector                 mean=1.27ms  median=1.19ms  p95=1.93ms
+  Face Embedding (FACELIVT)           mean=24.88ms  median=22.92ms  p95=37.55ms
+  KNN Top-5 Matching                  mean=1.07ms  median=0.39ms  p95=1.48ms
+  State Machine Check                 mean=0.00ms  median=0.00ms  p95=0.00ms
+  TỔNG PIPELINE                       mean=36.34ms  median=32.76ms  p95=55.62ms
+============================================================
+  Throughput: ~27.5 FPS (inference only)

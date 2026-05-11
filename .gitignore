@@ -34,3 +34,11 @@ models/*.data
 benchmarks/data_benchmark/
 dataset_clean/
 data_faces/
+VN-celeb/ 
+VN-celeb-clean/ 
+data_faces/ 
+dataset_clean/ 
+VN-celeb/ 
+VN-celeb-clean/ 
+data_faces/ 
+dataset_clean/ 

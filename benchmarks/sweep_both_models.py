@@ -1,5 +1,5 @@
 """
-Sweep Threshold cho SFace & FaceLiVT → Tìm ngưỡng tối ưu → So sánh.
+Sweep Threshold cho SFace, FaceLiVT2_S_FP32, FaceLiVT2_S_INT8 → Tìm ngưỡng tối ưu → So sánh.
 
   cd /d "D:\DAN\2. DAN\Bài tập\TTNT cho hệ thống nhúng\Đồ án hệ thống nhúng\FaceRecognitionAttendance"
   python benchmarks/sweep_both_models.py
@@ -17,7 +17,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.face_detector import FaceDetector
-from app.config import SFACE_MODEL, FACELIVT_MODEL
+from app.config import SFACE_MODEL, FACELIVT_MODEL, MODELS_DIR
+
+FACELIVT_INT8_MODEL = MODELS_DIR / "facelivtv2_s_512_int8.onnx"
 
 IMG_EXTS = {".jpg", ".jpeg", ".png"}
 SEED = 42
@@ -65,10 +67,32 @@ class SFaceEmb:
 
 
 class FaceLiVTEmb:
-    name = "FaceLiVT"
+    name = "FaceLiVT2_S_FP32"
     def __init__(self):
         import onnxruntime as ort
         self.sess = ort.InferenceSession(str(FACELIVT_MODEL), providers=['CPUExecutionProvider'])
+        self.inp = self.sess.get_inputs()[0].name
+        dummy = np.random.randn(1, 3, 112, 112).astype(np.float32)
+        self.embed_dim = self.sess.run(None, {self.inp: dummy})[0].flatten().shape[0]
+
+    def get_embedding(self, frame, det):
+        face = align_face(frame, det)
+        if face is None: return np.zeros(self.embed_dim, dtype=np.float32)
+        rgb = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
+        blob = (rgb.astype(np.float32) - 127.5) / 127.5
+        blob = np.transpose(blob, (2, 0, 1))[np.newaxis, ...]
+        emb = self.sess.run(None, {self.inp: blob})[0].flatten()
+        n = np.linalg.norm(emb)
+        return emb / n if n > 1e-8 else emb
+
+
+class FaceLiVTInt8Emb:
+    name = "FaceLiVT2_S_INT8"
+    def __init__(self):
+        import onnxruntime as ort
+        if not FACELIVT_INT8_MODEL.exists():
+            raise FileNotFoundError(f"INT8 model not found: {FACELIVT_INT8_MODEL}")
+        self.sess = ort.InferenceSession(str(FACELIVT_INT8_MODEL), providers=['CPUExecutionProvider'])
         self.inp = self.sess.get_inputs()[0].name
         dummy = np.random.randn(1, 3, 112, 112).astype(np.float32)
         self.embed_dim = self.sess.run(None, {self.inp: dummy})[0].flatten().shape[0]
@@ -199,7 +223,7 @@ def main():
     thresholds = np.arange(0.10, 0.85, args.step).tolist()
 
     print("=" * 70)
-    print("  🔍 SWEEP THRESHOLD: SFace vs FaceLiVT")
+    print("  🔍 SWEEP THRESHOLD: SFace vs FaceLiVT2_S_FP32 vs FaceLiVT2_S_INT8")
     print("=" * 70)
 
     detector = FaceDetector()
@@ -213,13 +237,17 @@ def main():
 
     all_results = {}
 
-    for EmbClass in [SFaceEmb, FaceLiVTEmb]:
-        emb = EmbClass()
+    model_classes = [SFaceEmb, FaceLiVTEmb, FaceLiVTInt8Emb]
+    for step_i, EmbClass in enumerate(model_classes, start=1):
+        try:
+            emb = EmbClass()
+        except Exception as e:
+            print(f"\n  ⚠️ Bỏ qua {EmbClass.name}: {e}")
+            continue
         name = emb.name
         dim = emb.embed_dim
 
-        step_n = "2" if name == "SFace" else "3"
-        print(f"\n[{step_n}/5] {name} ({dim}-dim)...")
+        print(f"\n[{step_i}/{len(model_classes)}] {name} ({dim}-dim)...")
 
         # Enroll
         t0 = time.perf_counter()
@@ -249,18 +277,15 @@ def main():
             print(f"{marker}{r['thr']:>5.3f} │ {r['acc']:>7.2f} │ {r['far']:>7.2f} │ {r['frr']:>7.2f} │ "
                   f"{r['correct']:>7} │ {r['wrong']:>6} │ {r['unknown']:>7}")
 
-    # ═══════════════════════════════════════════════════════
-    #  Tìm ngưỡng tối ưu & so sánh
-    # ═══════════════════════════════════════════════════════
+    model_names = [n for n in ["SFace", "FaceLiVT2_S_FP32", "FaceLiVT2_S_INT8"] if n in all_results]
+
     print(f"\n{'='*70}")
     print(f"  ⭐ KẾT QUẢ: NGƯỠNG TỐI ƯU CỦA TỪNG MÔ HÌNH")
     print(f"{'='*70}")
 
     best = {}
-    for name in ["SFace", "FaceLiVT"]:
+    for name in model_names:
         data = all_results[name]
-        # Tìm threshold có accuracy cao nhất
-        # Nếu hòa accuracy, ưu tiên FAR thấp nhất
         b = max(data["results"], key=lambda r: (r["acc"], -r["far"]))
         best[name] = b
         dim = data["dim"]
@@ -272,33 +297,42 @@ def main():
         print(f"    Correct/Total    : {b['correct']}/{b['total']}")
 
     # Bảng so sánh tại ngưỡng tối ưu
-    s, f = best["SFace"], best["FaceLiVT"]
-    sd, fd = all_results["SFace"]["dim"], all_results["FaceLiVT"]["dim"]
-
-    print(f"\n{'='*70}")
+    print(f"\n{'='*100}")
     print(f"  ⚡ SO SÁNH TẠI NGƯỠNG TỐI ƯU")
-    print(f"{'='*70}")
-    print(f"  {'Metric':<25} │ {'SFace ('+str(sd)+'d)':>18} │ {'FaceLiVT ('+str(fd)+'d)':>18}")
-    print(f"  {'─'*25}─┼─{'─'*18}─┼─{'─'*18}")
-    rows = [
-        ("Threshold tối ưu", f"{s['thr']:.3f}", f"{f['thr']:.3f}"),
-        ("Accuracy (%)", f"{s['acc']:.2f}%", f"{f['acc']:.2f}%"),
-        ("FAR — nhầm người (%)", f"{s['far']:.2f}%", f"{f['far']:.2f}%"),
-        ("FRR — từ chối sai (%)", f"{s['frr']:.2f}%", f"{f['frr']:.2f}%"),
-        ("Correct / Total", f"{s['correct']}/{s['total']}", f"{f['correct']}/{f['total']}"),
-        ("Wrong (nhầm)", str(s["wrong"]), str(f["wrong"])),
-        ("Unknown (dưới thr)", str(s["unknown"]), str(f["unknown"])),
+    print(f"{'='*100}")
+    headers = [f"{n} ({all_results[n]['dim']}d)" for n in model_names]
+    hdr_line = "  " + f"{'Metric':<25}"
+    sep_line = "  " + f"{'─'*25}"
+    for h in headers:
+        hdr_line += f" │ {h:>22}"
+        sep_line += f"─┼─{'─'*22}"
+    print(hdr_line)
+    print(sep_line)
+    row_defs = [
+        ("Threshold tối ưu", lambda b: f"{b['thr']:.3f}"),
+        ("Accuracy (%)", lambda b: f"{b['acc']:.2f}%"),
+        ("FAR — nhầm người (%)", lambda b: f"{b['far']:.2f}%"),
+        ("FRR — từ chối sai (%)", lambda b: f"{b['frr']:.2f}%"),
+        ("Correct / Total", lambda b: f"{b['correct']}/{b['total']}"),
+        ("Wrong (nhầm)", lambda b: str(b["wrong"])),
+        ("Unknown (dưới thr)", lambda b: str(b["unknown"])),
     ]
-    for label, sv, fv in rows:
-        print(f"  {label:<25} │ {sv:>18} │ {fv:>18}")
-    print(f"{'='*70}")
+    for label, fmt_fn in row_defs:
+        line = f"  {label:<25}"
+        for n in model_names:
+            line += f" │ {fmt_fn(best[n]):>22}"
+        print(line)
+    print(f"{'='*100}")
 
-    winner = "SFace" if s["acc"] > f["acc"] else "FaceLiVT" if f["acc"] > s["acc"] else "Hòa"
-    print(f"  🏆 Winner (Accuracy): {winner}")
-    safer = "SFace" if s["far"] < f["far"] else "FaceLiVT" if f["far"] < s["far"] else "Hòa"
-    print(f"  🔒 Safer (FAR thấp): {safer}")
+    # Winner
+    acc_sorted = sorted(model_names, key=lambda n: best[n]["acc"], reverse=True)
+    print(f"  🏆 Winner (Accuracy): {acc_sorted[0]} ({best[acc_sorted[0]]['acc']:.2f}%)")
+    far_sorted = sorted(model_names, key=lambda n: best[n]["far"])
+    print(f"  🔒 Safer (FAR thấp): {far_sorted[0]} ({best[far_sorted[0]]['far']:.2f}%)")
 
     # ── Plot ──
+    colors = {"SFace": "#2196F3", "FaceLiVT2_S_FP32": "#FF5722", "FaceLiVT2_S_INT8": "#4CAF50"}
+    markers = {"SFace": "s", "FaceLiVT2_S_FP32": "D", "FaceLiVT2_S_INT8": "^"}
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -306,22 +340,25 @@ def main():
 
         fig, axes = plt.subplots(1, 3, figsize=(18, 5))
 
-        for name, color in [("SFace", "#2196F3"), ("FaceLiVT", "#FF5722")]:
+        for name in model_names:
+            color = colors.get(name, "#999")
             data = all_results[name]["results"]
             thrs = [r["thr"] for r in data]
             accs = [r["acc"] for r in data]
             fars = [r["far"] for r in data]
             frrs = [r["frr"] for r in data]
-
-            axes[0].plot(thrs, accs, '-o', color=color, markersize=3, label=f'{name} ({all_results[name]["dim"]}d)')
-            axes[1].plot(thrs, fars, '-o', color=color, markersize=3, label=f'{name}')
-            axes[2].plot(thrs, frrs, '-o', color=color, markersize=3, label=f'{name}')
+            lbl = f'{name} ({all_results[name]["dim"]}d)'
+            axes[0].plot(thrs, accs, '-o', color=color, markersize=3, label=lbl)
+            axes[1].plot(thrs, fars, '-o', color=color, markersize=3, label=name)
+            axes[2].plot(thrs, frrs, '-o', color=color, markersize=3, label=name)
 
         # Mark optimal
-        for name, marker, color in [("SFace", "s", "#1565C0"), ("FaceLiVT", "D", "#BF360C")]:
+        for name in model_names:
             b = best[name]
-            axes[0].axvline(b["thr"], color=color, linestyle='--', alpha=0.5)
-            axes[0].plot(b["thr"], b["acc"], marker, color=color, markersize=10, zorder=5)
+            c = colors.get(name, "#999")
+            m = markers.get(name, "o")
+            axes[0].axvline(b["thr"], color=c, linestyle='--', alpha=0.5)
+            axes[0].plot(b["thr"], b["acc"], m, color=c, markersize=10, zorder=5)
 
         axes[0].set_title("Accuracy vs Threshold", fontweight='bold')
         axes[0].set_xlabel("Threshold"); axes[0].set_ylabel("Accuracy (%)")
@@ -335,7 +372,7 @@ def main():
         axes[2].set_xlabel("Threshold"); axes[2].set_ylabel("FRR (%)")
         axes[2].legend(); axes[2].grid(True, alpha=0.3)
 
-        plt.suptitle(f"Threshold Sweep — SFace vs FaceLiVT ({n_people} người, {n_probe} probe)",
+        plt.suptitle(f"Threshold Sweep — 3 Models ({n_people} người, {n_probe} probe)",
                      fontsize=14, fontweight='bold')
         plt.tight_layout()
         plot_path = out_dir / f"sweep_comparison_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
@@ -348,7 +385,7 @@ def main():
     csv_path = out_dir / f"sweep_comparison_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
     with open(csv_path, "w", encoding="utf-8") as fh:
         fh.write("model,dim,threshold,accuracy,far,frr,correct,wrong,unknown,total\n")
-        for name in ["SFace", "FaceLiVT"]:
+        for name in model_names:
             d = all_results[name]
             for r in d["results"]:
                 fh.write(f"{name},{d['dim']},{r['thr']:.3f},{r['acc']:.2f},{r['far']:.2f},"

@@ -16,7 +16,7 @@ MODELS_DIR.mkdir(exist_ok=True)
 # ── Model files ────────────────────────────────────────
 YUNET_MODEL = MODELS_DIR / "face_detection_yunet_2023mar.onnx"
 SFACE_MODEL = MODELS_DIR / "face_recognition_sface_2021dec.onnx"
-FACELIVT_MODEL = MODELS_DIR / "facelivtv2_s.onnx"
+FACELIVT_MODEL = MODELS_DIR / "facelivtv2_s_512.onnx"
 
 # ── Face Recognition Backend ──────────────────────────
 # "auto"     = thử FaceLiVT trước, nếu lỗi fallback SFace

@@ -1,0 +1,22 @@
+Accuracy Report — 2026-05-11 13:24:21.282529
+Dataset: D:\DAN\2. DAN\Bài tập\TTNT cho hệ thống nhúng\Đồ án hệ thống nhúng\FaceRecognitionAttendance\dataset_clean
+People: 224, Gallery: 4304, Probe: 966
+
+SFace (128d, thr=0.363):
+  Accuracy: 89.03%
+  FAR: 9.94%  FRR: 1.04%
+  Correct=860 Wrong=96 Unknown=1 NoFace=9
+  Enroll: 139.8s  Test: 30.9s
+
+FaceLiVT2_S_FP32 (512d, thr=0.5):
+  Accuracy: 61.39%
+  FAR: 1.55%  FRR: 37.06%
+  Correct=593 Wrong=15 Unknown=349 NoFace=9
+  Enroll: 61.1s  Test: 13.9s
+
+FaceLiVT2_S_INT8 (512d, thr=0.5):
+  Accuracy: 51.04%
+  FAR: 1.86%  FRR: 47.10%
+  Correct=493 Wrong=18 Unknown=446 NoFace=9
+  Enroll: 78.8s  Test: 18.2s
+
