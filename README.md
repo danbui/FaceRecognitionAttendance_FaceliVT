@@ -241,13 +241,29 @@ FACE_BACKEND=sface python3 run_cv2.py --source usb
 
 ### So sánh Backend
 
-| | SFace | FaceLiVT v2-xs |
-|---|---|---|
-| Embedding dim | 128 | 512 |
-| Kích thước model | 37 MB | 17 MB |
-| Tốc độ (Pi 4) | ~40ms | ~80ms |
-| Dependency | OpenCV (sẵn có) | ONNX Runtime |
-| Accuracy | Tốt | Rất tốt (khuôn mặt Châu Á) |
+| | SFace | FaceLiVT v2-S (FP32) | FaceLiVT v2-S (INT8) |
+|---|---|---|---|
+| Embedding dim | 128 | 512 | 512 |
+| Kích thước model | 37 MB | 17 MB | ~5 MB |
+| Tốc độ (Pi 4) | ~40ms | ~80ms | ~60ms |
+| Dependency | OpenCV (sẵn có) | ONNX Runtime | ONNX Runtime |
+| Accuracy | Tốt | Rất tốt (khuôn mặt Châu Á) | Khá tốt |
+
+### ⚡ So sánh tại Ngưỡng Tối Ưu
+
+> Benchmark trên tập **3068 cặp so sánh** (VN-celeb dataset), threshold được tìm tự động bằng `sweep_threshold.py`.
+
+| Metric | SFace (128d) | FaceLiVT2\_S FP32 (512d) | FaceLiVT2\_S INT8 (512d) |
+|---|:---:|:---:|:---:|
+| **Threshold tối ưu** | 0.400 | 0.250 | 0.100 |
+| **Accuracy (%)** | **92.54%** | 89.96% | 88.01% |
+| **FAR — nhầm người (%)** | **7.24%** | 9.71% | 11.99% |
+| **FRR — từ chối sai (%)** | 0.23% | 0.33% | **0.00%** |
+| Correct / Total | 2839 / 3068 | 2760 / 3068 | 2700 / 3068 |
+| Wrong (nhầm) | 222 | 298 | 368 |
+| Unknown (dưới threshold) | 7 | 10 | 0 |
+
+> **Nhận xét:** SFace đạt accuracy cao nhất (92.54%) trên tập benchmark này. FaceLiVT2_S FP32 cho kết quả tốt ở ngưỡng thấp hơn (0.250). Phiên bản INT8 sau quantize bị giảm accuracy (~2%) nhưng FRR = 0% (không từ chối sai ai).
 
 ### Tuning Threshold
 
