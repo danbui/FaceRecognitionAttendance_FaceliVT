@@ -26,9 +26,14 @@ env/
 *.sqlite3
 
 # Models (dung lượng lớn, nên tự tải xuống trên Pi)
-models/*.onnx
-models/*.pt
-models/*.data
+*.onnx
+*.pt
+*.data
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
 
 # Benchmarks data
 benchmarks/data_benchmark/

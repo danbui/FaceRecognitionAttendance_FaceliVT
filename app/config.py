@@ -16,7 +16,7 @@ MODELS_DIR.mkdir(exist_ok=True)
 # ── Model files ────────────────────────────────────────
 YUNET_MODEL = MODELS_DIR / "face_detection_yunet_2023mar.onnx"
 SFACE_MODEL = MODELS_DIR / "face_recognition_sface_2021dec.onnx"
-FACELIVT_MODEL = MODELS_DIR / "facelivtv2_s_512.onnx"
+FACELIVT_MODEL = MODELS_DIR / "facelivtv2_s_finetuned_3phase.onnx"
 
 # ── Face Recognition Backend ──────────────────────────
 # "auto"     = thử FaceLiVT trước, nếu lỗi fallback SFace
@@ -33,7 +33,7 @@ DETECTION_TOP_K = 5000
 # ── Face Recognition Thresholds ────────────────────────
 # Mỗi model có cosine similarity range khác nhau → cần threshold riêng
 SFACE_COSINE_THRESHOLD = 0.363       # OpenCV recommend
-FACELIVT_COSINE_THRESHOLD = 0.50     # Tuỳ chỉnh qua benchmark
+FACELIVT_COSINE_THRESHOLD = 0.400    # Đã tune qua benchmark (Acc 92.7%, FAR 4.1%)
 RECOGNITION_COSINE_THRESHOLD = 0.363 # Sẽ được cập nhật runtime bởi FaceEmbedder
 
 # ── Kiosk ──────────────────────────────────────────────

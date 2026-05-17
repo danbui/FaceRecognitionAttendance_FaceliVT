@@ -1,4 +1,4 @@
-"""
+r"""
 Sweep Threshold cho SFace, FaceLiVT2_S_FP32, FaceLiVT2_S_INT8 → Tìm ngưỡng tối ưu → So sánh.
 
   cd /d "D:\DAN\2. DAN\Bài tập\TTNT cho hệ thống nhúng\Đồ án hệ thống nhúng\FaceRecognitionAttendance"
@@ -20,6 +20,8 @@ from app.face_detector import FaceDetector
 from app.config import SFACE_MODEL, FACELIVT_MODEL, MODELS_DIR
 
 FACELIVT_INT8_MODEL = MODELS_DIR / "facelivtv2_s_512_int8.onnx"
+SFACE_INT8_MODEL = MODELS_DIR / "face_recognition_sface_2021dec_int8.onnx"
+SFACE_INT8_BQ_MODEL = MODELS_DIR / "face_recognition_sface_2021dec_int8bq.onnx"
 
 IMG_EXTS = {".jpg", ".jpeg", ".png"}
 SEED = 42
@@ -48,15 +50,16 @@ def imread_u(path):
     return cv2.imdecode(buf, cv2.IMREAD_COLOR)
 
 
-class SFaceEmb:
-    name = "SFace"
-    def __init__(self):
+class GenericSFaceEmb:
+    def __init__(self, model_path):
+        self.name = model_path.stem
+        if not model_path.exists(): raise FileNotFoundError(f"Not found: {model_path}")
         try:
-            buf = np.fromfile(str(SFACE_MODEL), dtype=np.uint8)
+            buf = np.fromfile(str(model_path), dtype=np.uint8)
             self.rec = cv2.FaceRecognizerSF.create(framework="onnx",
                 bufferModel=buf, bufferConfig=np.array([], dtype=np.uint8))
         except TypeError:
-            self.rec = cv2.FaceRecognizerSF.create(str(SFACE_MODEL), "")
+            self.rec = cv2.FaceRecognizerSF.create(str(model_path), "")
         self.embed_dim = 128
 
     def get_embedding(self, frame, det):
@@ -65,34 +68,12 @@ class SFaceEmb:
         n = np.linalg.norm(feat)
         return feat / n if n > 1e-8 else feat
 
-
-class FaceLiVTEmb:
-    name = "FaceLiVT2_S_FP32"
-    def __init__(self):
+class GenericFaceLiVTEmb:
+    def __init__(self, model_path):
+        self.name = model_path.stem
+        if not model_path.exists(): raise FileNotFoundError(f"Not found: {model_path}")
         import onnxruntime as ort
-        self.sess = ort.InferenceSession(str(FACELIVT_MODEL), providers=['CPUExecutionProvider'])
-        self.inp = self.sess.get_inputs()[0].name
-        dummy = np.random.randn(1, 3, 112, 112).astype(np.float32)
-        self.embed_dim = self.sess.run(None, {self.inp: dummy})[0].flatten().shape[0]
-
-    def get_embedding(self, frame, det):
-        face = align_face(frame, det)
-        if face is None: return np.zeros(self.embed_dim, dtype=np.float32)
-        rgb = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
-        blob = (rgb.astype(np.float32) - 127.5) / 127.5
-        blob = np.transpose(blob, (2, 0, 1))[np.newaxis, ...]
-        emb = self.sess.run(None, {self.inp: blob})[0].flatten()
-        n = np.linalg.norm(emb)
-        return emb / n if n > 1e-8 else emb
-
-
-class FaceLiVTInt8Emb:
-    name = "FaceLiVT2_S_INT8"
-    def __init__(self):
-        import onnxruntime as ort
-        if not FACELIVT_INT8_MODEL.exists():
-            raise FileNotFoundError(f"INT8 model not found: {FACELIVT_INT8_MODEL}")
-        self.sess = ort.InferenceSession(str(FACELIVT_INT8_MODEL), providers=['CPUExecutionProvider'])
+        self.sess = ort.InferenceSession(str(model_path), providers=['CPUExecutionProvider'])
         self.inp = self.sess.get_inputs()[0].name
         dummy = np.random.randn(1, 3, 112, 112).astype(np.float32)
         self.embed_dim = self.sess.run(None, {self.inp: dummy})[0].flatten().shape[0]
@@ -223,7 +204,7 @@ def main():
     thresholds = np.arange(0.10, 0.85, args.step).tolist()
 
     print("=" * 70)
-    print("  🔍 SWEEP THRESHOLD: SFace vs FaceLiVT2_S_FP32 vs FaceLiVT2_S_INT8")
+    print("  🔍 SWEEP THRESHOLD: ALL MODELS COMPARISON")
     print("=" * 70)
 
     detector = FaceDetector()
@@ -237,17 +218,25 @@ def main():
 
     all_results = {}
 
-    model_classes = [SFaceEmb, FaceLiVTEmb, FaceLiVTInt8Emb]
-    for step_i, EmbClass in enumerate(model_classes, start=1):
+    model_instances = []
+    onnx_files = list(MODELS_DIR.glob("*.onnx"))
+    # Filter out detection model
+    onnx_files = [f for f in onnx_files if "yunet" not in f.name.lower()]
+
+    for p in onnx_files:
         try:
-            emb = EmbClass()
+            if "sface" in p.name.lower():
+                model_instances.append(GenericSFaceEmb(p))
+            else:
+                model_instances.append(GenericFaceLiVTEmb(p))
         except Exception as e:
-            print(f"\n  ⚠️ Bỏ qua {EmbClass.name}: {e}")
-            continue
+            print(f"\n  ⚠️ Bỏ qua {p.name}: {e}")
+
+    for step_i, emb in enumerate(model_instances, start=1):
         name = emb.name
         dim = emb.embed_dim
 
-        print(f"\n[{step_i}/{len(model_classes)}] {name} ({dim}-dim)...")
+        print(f"\n[{step_i}/{len(model_instances)}] {name} ({dim}-dim)...")
 
         # Enroll
         t0 = time.perf_counter()
@@ -277,7 +266,7 @@ def main():
             print(f"{marker}{r['thr']:>5.3f} │ {r['acc']:>7.2f} │ {r['far']:>7.2f} │ {r['frr']:>7.2f} │ "
                   f"{r['correct']:>7} │ {r['wrong']:>6} │ {r['unknown']:>7}")
 
-    model_names = [n for n in ["SFace", "FaceLiVT2_S_FP32", "FaceLiVT2_S_INT8"] if n in all_results]
+    model_names = list(all_results.keys())
 
     print(f"\n{'='*70}")
     print(f"  ⭐ KẾT QUẢ: NGƯỠNG TỐI ƯU CỦA TỪNG MÔ HÌNH")
@@ -331,8 +320,10 @@ def main():
     print(f"  🔒 Safer (FAR thấp): {far_sorted[0]} ({best[far_sorted[0]]['far']:.2f}%)")
 
     # ── Plot ──
-    colors = {"SFace": "#2196F3", "FaceLiVT2_S_FP32": "#FF5722", "FaceLiVT2_S_INT8": "#4CAF50"}
-    markers = {"SFace": "s", "FaceLiVT2_S_FP32": "D", "FaceLiVT2_S_INT8": "^"}
+    color_palette = ["#2196F3", "#FF5722", "#4CAF50", "#9C27B0", "#FFC107"]
+    marker_palette = ["s", "D", "^", "o", "v"]
+    colors = {name: color_palette[i % len(color_palette)] for i, name in enumerate(model_names)}
+    markers = {name: marker_palette[i % len(marker_palette)] for i, name in enumerate(model_names)}
     try:
         import matplotlib
         matplotlib.use("Agg")
