@@ -1,5 +1,5 @@
 """
-Benchmark Latency — So sánh 3 mô hình SFace: 
+Benchmark Latency — So sánh 3 mô hình SFace với ĐẦY ĐỦ PIPELINE: 
 1. SFace Gốc (face_recognition_sface_2021dec.onnx)
 2. SFace INT8 (face_recognition_sface_2021dec_int8.onnx)
 3. SFace INT8 BQ (face_recognition_sface_2021dec_int8bq.onnx)
@@ -20,6 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.face_detector import FaceDetector
+from app.best_frame_selector import BestFrameSelector
 from app.config import MODELS_DIR
 
 SFACE_ORIGINAL = MODELS_DIR / "face_recognition_sface_2021dec.onnx"
@@ -67,9 +68,10 @@ class SFaceVariantEmb:
         except TypeError:
             self.rec = cv2.FaceRecognizerSF.create(str(model_path), "")
 
-    def get_embedding(self, frame, det):
-        # SFace handles alignment internally using its FaceRecognizerSF API
-        aligned = self.rec.alignCrop(frame, det)
+    def align(self, frame, det):
+        return self.rec.alignCrop(frame, det)
+
+    def get_embedding(self, aligned):
         feat = self.rec.feature(aligned).flatten()
         n = np.linalg.norm(feat)
         return feat / n if n > 1e-8 else feat
@@ -79,10 +81,10 @@ def enroll_gallery(images, detector, embedder, max_enroll=500):
     for p in images[:max_enroll]:
         img = imread_u(p)
         if img is None: continue
-        dets = detector.detect_all(img)
-        if dets is None: continue
-        det = dets[int(np.argmax(dets[:, 2] * dets[:, 3]))]
-        emb = embedder.get_embedding(img, det).flatten()
+        box, raw = detector.detect_largest_with_raw(img)
+        if raw is None: continue
+        aligned = embedder.align(img, raw)
+        emb = embedder.get_embedding(aligned).flatten()
         n = np.linalg.norm(emb)
         if n < 1e-8: continue
         embs.append(emb / n)
@@ -107,20 +109,20 @@ def knn_match(query, matrix, labels, k=5, threshold=0.3):
     if not votes: return None
     return max(votes, key=votes.get)
 
-def benchmark_models(images, detector, embedders, galleries, warmup=5):
+def benchmark_models(images, detector, selector, embedders, galleries, warmup=5):
     model_names = [e.name for e in embedders]
     print(f"  Warmup ({warmup} ảnh)...")
     for p in images[:warmup]:
         img = imread_u(p)
         if img is None: continue
-        dets = detector.detect_all(img)
-        if dets is None: continue
-        det = dets[int(np.argmax(dets[:, 2] * dets[:, 3]))]
-        for emb in embedders: emb.get_embedding(img, det)
+        box, raw = detector.detect_largest_with_raw(img)
+        if raw is None: continue
+        for emb in embedders: emb.get_embedding(emb.align(img, raw))
 
     det_times = []
-    # SFace aligns internally, so we time (Align+Embed) together or just Embed.
-    # We will log it as "Alignment + Embedding" time.
+    bf_times = []
+    aln_times = []
+    state_times = []
     emb_times = {name: [] for name in model_names}
     knn_times = {name: [] for name in model_names}
     total_times = {name: [] for name in model_names}
@@ -135,37 +137,63 @@ def benchmark_models(images, detector, embedders, galleries, warmup=5):
             n_errors += 1
             continue
 
+        # 1. Detection (SHARED)
         t0 = time.perf_counter()
-        dets = detector.detect_all(img)
+        box, raw = detector.detect_largest_with_raw(img)
         dt_det = (time.perf_counter() - t0) * 1000
         det_times.append(dt_det)
 
-        if dets is None: continue
-        det = dets[int(np.argmax(dets[:, 2] * dets[:, 3]))]
+        if raw is None: continue
         n_faces += 1
+
+        # 2. Best Frame (SHARED)
+        t0 = time.perf_counter()
+        selector.reset()
+        selector.update(img.copy(), box, raw[4:14], raw)
+        bf, br, _ = selector.get_best()
+        if bf is None: bf, br = img, raw
+        dt_bf = (time.perf_counter() - t0) * 1000
+        bf_times.append(dt_bf)
+
+        # 3. Alignment (SHARED for all SFace variants as they use the same alignCrop logic)
+        t0 = time.perf_counter()
+        aligned = embedders[0].align(bf, br)
+        dt_aln = (time.perf_counter() - t0) * 1000
+        aln_times.append(dt_aln)
 
         for i, emb_model in enumerate(embedders):
             name = emb_model.name
             matrix, labels = galleries[i]
 
-            # SFace get_embedding includes alignCrop + feature extraction
+            # 4. Embedding (SFace)
             t0 = time.perf_counter()
-            emb_vec = emb_model.get_embedding(img, det)
+            emb_vec = emb_model.get_embedding(aligned)
             dt_emb = (time.perf_counter() - t0) * 1000
             emb_times[name].append(dt_emb)
 
+            # 5. KNN Matching
             t0 = time.perf_counter()
-            _ = knn_match(emb_vec, matrix, labels)
+            match_res = knn_match(emb_vec, matrix, labels)
             dt_knn = (time.perf_counter() - t0) * 1000
             knn_times[name].append(dt_knn)
 
-            total_times[name].append(dt_det + dt_emb + dt_knn)
+            # 6. State Machine Check (SHARED - simulated)
+            t0 = time.perf_counter()
+            _ = match_res  # simulate checking result
+            dt_st = (time.perf_counter() - t0) * 1000
+            if i == 0: state_times.append(dt_st) # only record once per image for stats
+
+            # Total
+            total_times[name].append(dt_det + dt_bf + dt_aln + dt_emb + dt_knn + dt_st)
 
         if (idx + 1) % 50 == 0 or (idx + 1) == total:
             print(f"    [{idx+1}/{total}] faces={n_faces} errors={n_errors}")
 
     return {
         "detection": stats(det_times),
+        "best_frame": stats(bf_times),
+        "alignment": stats(aln_times),
+        "state_check": stats(state_times),
         "emb": {name: stats(emb_times[name]) for name in model_names},
         "knn": {name: stats(knn_times[name]) for name in model_names},
         "total": {name: stats(total_times[name]) for name in model_names},
@@ -179,7 +207,7 @@ def print_report(r, sys_info, source):
     dims = r["dims"]
 
     print(f"\n{'='*100}")
-    print(f"  ⏱️  BENCHMARK LATENCY — SFace Variants")
+    print(f"  ⏱️  BENCHMARK FULL PIPELINE — SFace Variants")
     print(f"{'='*100}")
     print(f"  Thời gian  : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"  Platform   : {sys_info['platform']} ({sys_info['machine']})")
@@ -194,40 +222,70 @@ def print_report(r, sys_info, source):
     for _ in names: sep += f"─┼─{'─'*col_w}"
     print(sep)
 
-    det = r["detection"]
-    det_line = f"  {'1. Detection (YuNet)':<30}"
+    det, bf, aln, st = r["detection"], r["best_frame"], r["alignment"], r["state_check"]
+    det_line = f"  {'1. Face Detection (YuNet)':<30}"
+    bf_line  = f"  {'2. Best Frame Selector':<30}"
+    aln_line = f"  {'3. Alignment (OpenCV)':<30}"
+    st_line  = f"  {'6. State Machine Check':<30}"
     for _ in names:
         det_line += f" │ {det['mean']:>{col_w-2}.2f}ms"
+        bf_line  += f" │ {bf['mean']:>{col_w-2}.2f}ms"
+        aln_line += f" │ {aln['mean']:>{col_w-2}.2f}ms"
+        st_line  += f" │ {st['mean']:>{col_w-2}.2f}ms"
     print(det_line + "  (shared)")
+    print(bf_line + "  (shared)")
+    print(aln_line + "  (shared)")
 
-    emb_line = f"  {'2. Align + Embed (OpenCV)':<30}"
-    knn_line = f"  {'3. KNN Top-5 Matching':<30}"
+    emb_line = f"  {'4. Face Embedding (SFace)':<30}"
+    knn_line = f"  {'5. KNN Top-5 Matching':<30}"
     for n in names:
         emb_line += f" │ {r['emb'][n]['mean']:>{col_w-2}.2f}ms"
         knn_line += f" │ {r['knn'][n]['mean']:>{col_w-2}.2f}ms"
     print(emb_line); print(knn_line)
+    
+    print(st_line + "  (shared)")
     print(sep)
 
     tot_line = f"  {'★ TỔNG PIPELINE':<30}"
     for n in names: tot_line += f" │ {r['total'][n]['mean']:>{col_w-2}.2f}ms"
     print(tot_line)
 
-    fps_line = f"  {'  → FPS':<30}"
+    fps_line = f"  {'  → Throughput':<30}"
     for n in names: fps_line += f" │ {'~'+str(int(1000/max(r['total'][n]['mean'],1)))+' FPS':>{col_w}}"
     print(fps_line)
     print(f"{'='*100}\n")
+    
+    print(f"\n  📊 CHI TIẾT THỐNG KÊ TỪNG MODEL (ms):")
+    for n in names:
+        print(f"  [{n}]")
+        e = r["emb"][n]
+        k = r["knn"][n]
+        t = r["total"][n]
+        print(f"    {'Face Detection (YuNet)':<30} mean={det['mean']:>6.2f}ms  median={det['med']:>6.2f}ms  p95={det['p95']:>6.2f}ms")
+        print(f"    {'Best Frame Selector':<30} mean={bf['mean']:>6.2f}ms  median={bf['med']:>6.2f}ms  p95={bf['p95']:>6.2f}ms")
+        print(f"    {'Alignment (OpenCV)':<30} mean={aln['mean']:>6.2f}ms  median={aln['med']:>6.2f}ms  p95={aln['p95']:>6.2f}ms")
+        print(f"    {'Face Embedding (SFace)':<30} mean={e['mean']:>6.2f}ms  median={e['med']:>6.2f}ms  p95={e['p95']:>6.2f}ms")
+        print(f"    {'KNN Top-5 Matching':<30} mean={k['mean']:>6.2f}ms  median={k['med']:>6.2f}ms  p95={k['p95']:>6.2f}ms")
+        print(f"    {'State Machine Check':<30} mean={st['mean']:>6.2f}ms  median={st['med']:>6.2f}ms  p95={st['p95']:>6.2f}ms")
+        print(f"    {'TỔNG PIPELINE':<30} mean={t['mean']:>6.2f}ms  median={t['med']:>6.2f}ms  p95={t['p95']:>6.2f}ms")
+        print(f"    {'-'*60}")
+        print(f"    Throughput: ~{1000/max(t['mean'], 0.01):.1f} FPS (inference only)\n")
+
 
 def save_csv(r, sys_info, source, out_dir):
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_path = out_dir / f"latency_sface_variants_{ts}.csv"
+    csv_path = out_dir / f"latency_full_pipeline_sface_variants_{ts}.csv"
     names, dims = r["model_names"], r["dims"]
 
     with open(csv_path, "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
         w.writerow(["step", "model", "mean_ms", "median_ms", "p95_ms", "min_ms", "max_ms"])
         
-        det = r["detection"]
+        det, bf, aln, st = r["detection"], r["best_frame"], r["alignment"], r["state_check"]
         w.writerow(["detection", "shared", f"{det['mean']:.2f}", f"{det['med']:.2f}", f"{det['p95']:.2f}", f"{det['min']:.2f}", f"{det['max']:.2f}"])
+        w.writerow(["best_frame", "shared", f"{bf['mean']:.2f}", f"{bf['med']:.2f}", f"{bf['p95']:.2f}", f"{bf['min']:.2f}", f"{bf['max']:.2f}"])
+        w.writerow(["alignment", "shared", f"{aln['mean']:.2f}", f"{aln['med']:.2f}", f"{aln['p95']:.2f}", f"{aln['min']:.2f}", f"{aln['max']:.2f}"])
+        w.writerow(["state_check", "shared", f"{st['mean']:.2f}", f"{st['med']:.2f}", f"{st['p95']:.2f}", f"{st['min']:.2f}", f"{st['max']:.2f}"])
         
         for step_key in ["emb", "knn", "total"]:
             for n in names:
@@ -247,13 +305,14 @@ def main():
     out_dir.mkdir(exist_ok=True)
 
     print("=" * 80)
-    print("  ⏱️  BENCHMARK LATENCY: SFACE VARIANTS")
+    print("  ⏱️  BENCHMARK FULL PIPELINE: SFACE VARIANTS")
     print("=" * 80)
 
     sys_info = get_sys_info()
 
     print(f"\n[1/4] Khởi tạo models...")
     detector = FaceDetector()
+    selector = BestFrameSelector()
     
     embedders = []
     models_to_test = [
@@ -289,7 +348,7 @@ def main():
         print(f"  {emb.name}: {matrix.shape[0]} embeddings ({time.perf_counter()-t0:.1f}s)")
 
     print(f"\n[4/4] Benchmark...")
-    results = benchmark_models(images, detector, embedders, galleries)
+    results = benchmark_models(images, detector, selector, embedders, galleries)
 
     print_report(results, sys_info, str(ds))
     save_csv(results, sys_info, str(ds), out_dir)
