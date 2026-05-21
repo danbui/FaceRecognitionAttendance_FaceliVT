@@ -4,30 +4,45 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard – Edge Attendance</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
         :root {
-            --bg-primary: #0f172a;
-            --bg-secondary: #1e293b;
-            --bg-card: rgba(30, 41, 59, 0.7);
-            --border: rgba(148, 163, 184, 0.1);
-            --text-primary: #f1f5f9;
-            --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-            --accent-blue: #3b82f6;
-            --accent-green: #22c55e;
-            --accent-orange: #f59e0b;
-            --accent-red: #ef4444;
-            --accent-purple: #8b5cf6;
+            /* Colors */
+            --color-ember-orange: #f53900;
+            --color-pale-peach: #ffe0d6;
+            --color-midnight-charcoal: #040101;
+            --color-canvas-white: #fffafa;
+            --color-border-fog: #e5e5e5;
+            --color-muted-ash: #827e7e;
+            --color-divider-gray: #c0bcbc;
+
+            /* Typography */
+            --font-geist: 'Outfit', 'Geist', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            
+            /* Border Radius */
+            --radius-tags: 9999px;
+            --radius-cards: 8px;
+            --radius-buttons: 4px;
+            --radius-smallcomponents: 12px;
+
+            /* Shadows */
+            --shadow-subtle: rgba(4, 1, 1, 0.03) 0px 1px 3px 0px, rgba(4, 1, 1, 0.02) 0px 1px 2px 0px;
+        }
+
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box; 
         }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
+            font-family: var(--font-geist);
+            background-color: var(--color-canvas-white);
+            color: var(--color-midnight-charcoal);
             min-height: 100vh;
+            line-height: 1.4;
         }
 
         /* ── Navbar ── */
@@ -35,13 +50,12 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 16px 32px;
-            background: var(--bg-secondary);
-            border-bottom: 1px solid var(--border);
+            padding: 16px 40px;
+            background: var(--color-canvas-white);
+            border-bottom: 1px solid var(--color-border-fog);
             position: sticky;
             top: 0;
             z-index: 100;
-            backdrop-filter: blur(12px);
         }
 
         .nav-brand {
@@ -53,327 +67,379 @@
         .nav-brand-icon {
             width: 36px;
             height: 36px;
-            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
-            border-radius: 10px;
+            background: var(--color-pale-peach);
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 18px;
+            color: var(--color-ember-orange);
         }
 
         .nav-brand h2 {
-            font-size: 17px;
+            font-size: 20px;
             font-weight: 700;
+            color: var(--color-midnight-charcoal);
+            letter-spacing: -0.5px;
         }
 
         .nav-right {
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 24px;
         }
 
         .nav-user {
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 13px;
-            color: var(--text-secondary);
+            font-size: 14px;
+            color: var(--color-midnight-charcoal);
+            font-weight: 500;
         }
 
         .role-badge {
-            padding: 4px 10px;
-            border-radius: 20px;
+            padding: 2px 10px;
+            border-radius: var(--radius-tags);
             font-size: 11px;
             font-weight: 600;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
-        .role-admin { background: rgba(139, 92, 246, 0.2); color: #c4b5fd; }
-        .role-employee { background: rgba(59, 130, 246, 0.2); color: #93c5fd; }
+        .role-admin { 
+            background: var(--color-pale-peach); 
+            color: var(--color-ember-orange); 
+        }
+        
+        .role-employee { 
+            background: var(--color-border-fog); 
+            color: var(--color-muted-ash); 
+        }
 
         .btn-logout {
-            padding: 8px 16px;
-            background: rgba(239, 68, 68, 0.1);
-            color: #fca5a5;
-            border: 1px solid rgba(239, 68, 68, 0.2);
-            border-radius: 8px;
+            padding: 8px 20px;
+            background: var(--color-canvas-white);
+            color: var(--color-ember-orange);
+            border: 1px solid var(--color-ember-orange);
+            border-radius: var(--radius-buttons);
             text-decoration: none;
             font-size: 13px;
-            font-weight: 500;
+            font-weight: 600;
             transition: all 0.2s;
         }
 
         .btn-logout:hover {
-            background: rgba(239, 68, 68, 0.2);
+            background: var(--color-pale-peach);
         }
 
         /* ── Main Layout ── */
         .main-content {
-            max-width: 1280px;
+            max-width: 1200px;
             margin: 0 auto;
-            padding: 28px 32px;
+            padding: 48px 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
         }
 
         /* ── Stat Cards ── */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 16px;
-            margin-bottom: 28px;
+            gap: 24px;
         }
 
         .stat-card {
-            background: var(--bg-card);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 24px;
+            background: var(--color-canvas-white);
+            border: 1px solid var(--color-border-fog);
+            border-radius: var(--radius-cards);
+            padding: 32px 24px;
+            box-shadow: var(--shadow-subtle);
             transition: transform 0.2s, box-shadow 0.2s;
         }
 
         .stat-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 4px 12px rgba(4, 1, 1, 0.03);
         }
 
         .stat-label {
             font-size: 12px;
-            font-weight: 500;
-            color: var(--text-muted);
+            font-weight: 600;
+            color: var(--color-muted-ash);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.8px;
             margin-bottom: 8px;
         }
 
         .stat-value {
-            font-size: 32px;
+            font-size: 36px;
             font-weight: 700;
+            color: var(--color-midnight-charcoal);
         }
 
-        .stat-blue .stat-value { color: var(--accent-blue); }
-        .stat-green .stat-value { color: var(--accent-green); }
-        .stat-orange .stat-value { color: var(--accent-orange); }
-        .stat-red .stat-value { color: var(--accent-red); }
+        .stat-blue .stat-value { color: var(--color-midnight-charcoal); }
+        .stat-green .stat-value { color: #10b981; } /* Muted Green for active indicator */
+        .stat-orange .stat-value { color: var(--color-ember-orange); }
+        .stat-red .stat-value { color: var(--color-muted-ash); }
 
         /* ── Cards ── */
         .card {
-            background: var(--bg-card);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 24px;
-            margin-bottom: 24px;
+            background: var(--color-canvas-white);
+            border: 1px solid var(--color-border-fog);
+            border-radius: var(--radius-cards);
+            padding: 40px;
+            box-shadow: var(--shadow-subtle);
         }
 
         .card-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
+            border-bottom: 1px solid var(--color-border-fog);
+            padding-bottom: 16px;
         }
 
         .card-title {
-            font-size: 16px;
+            font-size: 20px;
             font-weight: 600;
+            color: var(--color-midnight-charcoal);
+            letter-spacing: -0.3px;
         }
 
         /* ── Filter Bar ── */
         .filter-bar {
             display: flex;
             flex-wrap: wrap;
-            gap: 12px;
-            align-items: end;
+            gap: 16px;
+            align-items: flex-end;
         }
 
         .filter-group {
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 6px;
         }
 
         .filter-group label {
-            font-size: 11px;
-            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--color-muted-ash);
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
 
         .filter-input {
             padding: 10px 14px;
-            background: rgba(15, 23, 42, 0.6);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            color: var(--text-primary);
+            background: var(--color-canvas-white);
+            border: 1px solid var(--color-border-fog);
+            border-radius: var(--radius-buttons);
+            color: var(--color-midnight-charcoal);
             font-size: 13px;
             font-family: inherit;
             outline: none;
-            transition: border-color 0.2s;
-            min-width: 150px;
+            transition: all 0.2s;
+            min-width: 180px;
         }
 
         .filter-input:focus {
-            border-color: var(--accent-blue);
+            border-color: var(--color-ember-orange);
+            box-shadow: 0 0 0 3px rgba(245, 57, 0, 0.08);
         }
 
         select.filter-input {
             cursor: pointer;
         }
 
+        /* Buttons matching style reference */
         .btn {
-            padding: 10px 18px;
-            border-radius: 10px;
+            padding: 10px 24px;
+            border-radius: var(--radius-buttons);
             font-size: 13px;
-            font-weight: 500;
+            font-weight: 600;
             font-family: inherit;
             border: none;
             cursor: pointer;
             text-decoration: none;
             display: inline-flex;
             align-items: center;
-            gap: 6px;
+            justify-content: center;
+            gap: 8px;
             transition: all 0.2s;
         }
 
+        /* Primary Filled: Ember Orange, text Canvas White */
         .btn-primary {
-            background: linear-gradient(135deg, var(--accent-blue), #6366f1);
-            color: white;
+            background: var(--color-ember-orange);
+            color: var(--color-canvas-white);
         }
 
         .btn-primary:hover {
-            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
-            transform: translateY(-1px);
+            opacity: 0.95;
+            box-shadow: 0 4px 10px rgba(245, 57, 0, 0.15);
         }
 
+        /* Secondary Ghost: Text/Border Ember Orange, Background Canvas White */
         .btn-secondary {
-            background: rgba(148, 163, 184, 0.1);
-            color: var(--text-secondary);
-            border: 1px solid var(--border);
+            background: var(--color-canvas-white);
+            color: var(--color-ember-orange);
+            border: 1px solid var(--color-ember-orange);
         }
 
         .btn-secondary:hover {
-            background: rgba(148, 163, 184, 0.15);
+            background: var(--color-pale-peach);
         }
 
-        .btn-success {
-            background: linear-gradient(135deg, var(--accent-green), #16a34a);
-            color: white;
+        /* Soft Secondary: Text Ember Orange, Background Pale Peach */
+        .btn-soft {
+            background: var(--color-pale-peach);
+            color: var(--color-ember-orange);
+        }
+
+        .btn-soft:hover {
+            opacity: 0.9;
+        }
+
+        .btn-danger {
+            background: var(--color-canvas-white);
+            color: #d32f2f;
+            border: 1px solid #d32f2f;
+        }
+        .btn-danger:hover {
+            background: #ffebee;
         }
 
         /* ── Tables ── */
         .table-container {
             overflow-x: auto;
-            border-radius: 12px;
+            border: 1px solid var(--color-border-fog);
+            border-radius: var(--radius-cards);
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
+            text-align: left;
         }
 
         th {
-            text-align: left;
-            padding: 12px 16px;
-            font-size: 11px;
+            padding: 14px 20px;
+            font-size: 12px;
             font-weight: 600;
-            color: var(--text-muted);
+            color: var(--color-muted-ash);
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            background: rgba(15, 23, 42, 0.4);
-            border-bottom: 1px solid var(--border);
+            background: var(--color-canvas-white);
+            border-bottom: 1px solid var(--color-border-fog);
         }
 
         td {
-            padding: 12px 16px;
-            font-size: 13px;
-            border-bottom: 1px solid rgba(148, 163, 184, 0.05);
-            color: var(--text-secondary);
+            padding: 14px 20px;
+            font-size: 14px;
+            border-bottom: 1px solid var(--color-border-fog);
+            color: var(--color-midnight-charcoal);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
         }
 
         tr:hover td {
-            background: rgba(148, 163, 184, 0.03);
+            background: rgba(4, 1, 1, 0.01);
         }
 
         .badge {
             padding: 4px 10px;
-            border-radius: 20px;
+            border-radius: var(--radius-tags);
             font-size: 11px;
             font-weight: 600;
+            display: inline-block;
         }
 
         .badge-checkin {
-            background: rgba(34, 197, 94, 0.15);
-            color: #86efac;
+            background: #e6f7ed;
+            color: #0f9f58;
         }
 
         .badge-checkout {
-            background: rgba(245, 158, 11, 0.15);
-            color: #fcd34d;
+            background: #fff3e0;
+            color: #e65100;
         }
 
         .confidence-bar {
             display: inline-block;
-            width: 50px;
+            width: 60px;
             height: 6px;
-            background: rgba(148, 163, 184, 0.1);
+            background: var(--color-border-fog);
             border-radius: 3px;
             overflow: hidden;
             vertical-align: middle;
-            margin-right: 6px;
+            margin-right: 8px;
         }
 
         .confidence-fill {
             height: 100%;
             border-radius: 3px;
-            background: var(--accent-green);
+            background: var(--color-ember-orange);
         }
 
         /* ── Form ── */
         .form-row {
             display: flex;
             flex-wrap: wrap;
-            gap: 12px;
-            align-items: end;
+            gap: 16px;
+            align-items: center;
         }
 
         .form-input {
             padding: 10px 14px;
-            background: rgba(15, 23, 42, 0.6);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            color: var(--text-primary);
+            background: var(--color-canvas-white);
+            border: 1px solid var(--color-border-fog);
+            border-radius: var(--radius-buttons);
+            color: var(--color-midnight-charcoal);
             font-size: 13px;
             font-family: inherit;
             outline: none;
-            transition: border-color 0.2s;
+            transition: all 0.2s;
+            flex: 1;
+            min-width: 180px;
         }
 
         .form-input:focus {
-            border-color: var(--accent-blue);
+            border-color: var(--color-ember-orange);
+            box-shadow: 0 0 0 3px rgba(245, 57, 0, 0.08);
         }
 
         .form-input::placeholder {
-            color: var(--text-muted);
+            color: var(--color-muted-ash);
+            opacity: 0.6;
         }
 
         /* ── Empty State ── */
         .empty-state {
             text-align: center;
             padding: 48px 20px;
-            color: var(--text-muted);
+            color: var(--color-muted-ash);
         }
 
         .empty-state-icon {
             font-size: 40px;
             margin-bottom: 12px;
+            color: var(--color-divider-gray);
         }
 
         /* ── Responsive ── */
         @media (max-width: 768px) {
-            .navbar { padding: 12px 16px; }
-            .main-content { padding: 16px; }
-            .stats-grid { grid-template-columns: repeat(2, 1fr); }
-            .filter-bar { flex-direction: column; }
-            .filter-input { min-width: auto; width: 100%; }
+            .navbar { padding: 16px 20px; }
+            .main-content { padding: 24px 20px; gap: 24px; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+            .filter-bar { flex-direction: column; align-items: stretch; }
+            .filter-input { width: 100%; }
+            .form-row { flex-direction: column; align-items: stretch; }
+            .form-input { width: 100%; }
+            .card { padding: 24px; }
         }
     </style>
 </head>
@@ -381,7 +447,12 @@
     <!-- ── Navbar ── -->
     <nav class="navbar">
         <div class="nav-brand">
-            <div class="nav-brand-icon">👤</div>
+            <div class="nav-brand-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+            </div>
             <h2>Edge Attendance</h2>
         </div>
         <div class="nav-right">
@@ -422,7 +493,7 @@
         <!-- ── Filter Bar ── -->
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title">🔍 Bộ lọc</h3>
+                <h3 class="card-title">Bộ lọc tìm kiếm</h3>
             </div>
             <form method="get" action="/">
                 <div class="filter-bar">
@@ -445,7 +516,7 @@
                         </select>
                     </div>
                     {% endif %}
-                    <button type="submit" class="btn btn-primary">Lọc</button>
+                    <button type="submit" class="btn btn-primary">Áp dụng</button>
                     <a href="/" class="btn btn-secondary">Xóa bộ lọc</a>
                 </div>
             </form>
@@ -455,25 +526,25 @@
         {% if user.role == 'admin' %}
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title">➕ Thêm nhân viên</h3>
+                <h3 class="card-title">Thêm nhân viên mới</h3>
             </div>
             <form method="post" action="/employees">
                 <div class="form-row">
-                    <input class="form-input" name="employee_code" placeholder="Mã nhân viên" required>
-                    <input class="form-input" name="full_name" placeholder="Họ tên" required>
-                    <input class="form-input" name="department" placeholder="Phòng ban">
-                    <button type="submit" class="btn btn-success">Thêm</button>
+                    <input class="form-input" name="employee_code" placeholder="Mã nhân viên (ví dụ: NV001)" required>
+                    <input class="form-input" name="full_name" placeholder="Họ và tên" required>
+                    <input class="form-input" name="department" placeholder="Phòng ban (ví dụ: Hành chính)">
+                    <button type="submit" class="btn btn-primary">Thêm nhân viên</button>
                 </div>
             </form>
-            <p style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">
-                Lưu ý: Ghi danh khuôn mặt thực hiện tại kiosk (chọn chế độ "Ghi danh").
+            <p style="margin-top: 16px; font-size: 12px; color: var(--color-muted-ash); font-weight: 500;">
+                💡 <b>Lưu ý:</b> Ghi danh khuôn mặt thực hiện trực tiếp tại Kiosk điểm danh (chọn chế độ "Ghi danh").
             </p>
         </div>
 
         <!-- ── Employee List ── -->
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title">👥 Danh sách nhân viên</h3>
+                <h3 class="card-title">Danh sách nhân viên</h3>
             </div>
             <div class="table-container">
                 {% if employees %}
@@ -492,13 +563,13 @@
                         {% for e in employees %}
                         <tr>
                             <td>{{ e.id }}</td>
-                            <td style="color: var(--accent-blue); font-weight: 600;">{{ e.employee_code }}</td>
-                            <td style="color: var(--text-primary);">{{ e.full_name }}</td>
+                            <td style="color: var(--color-ember-orange); font-weight: 600;">{{ e.employee_code }}</td>
+                            <td style="color: var(--color-midnight-charcoal); font-weight: 500;">{{ e.full_name }}</td>
                             <td>{{ e.department }}</td>
                             <td>{{ e.created_at }}</td>
                             <td>
                                 <form method="post" action="/employees/{{ e.id }}/delete" onsubmit="return confirm('Xóa nhân viên sẽ xóa toàn bộ khuôn mặt và lịch sử điểm danh của họ. Chắc chắn xóa?');">
-                                    <button type="submit" class="btn btn-secondary" style="padding: 4px 8px; color: var(--accent-red); border-color: rgba(239, 68, 68, 0.3);">Xóa</button>
+                                    <button type="submit" class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;">Xóa</button>
                                 </form>
                             </td>
                         </tr>
@@ -507,8 +578,15 @@
                 </table>
                 {% else %}
                 <div class="empty-state">
-                    <div class="empty-state-icon">👥</div>
-                    <p>Chưa có nhân viên nào</p>
+                    <div class="empty-state-icon">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                    </div>
+                    <p>Chưa có nhân viên nào trong hệ thống</p>
                 </div>
                 {% endif %}
             </div>
@@ -519,7 +597,7 @@
         {% if user.role == 'admin' %}
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title">👤 Dữ liệu khuôn mặt (Embeddings)</h3>
+                <h3 class="card-title">Dữ liệu khuôn mặt (Embeddings)</h3>
             </div>
             <div class="table-container">
                 {% if face_records %}
@@ -529,7 +607,7 @@
                             <th>ID</th>
                             <th>Mã NV</th>
                             <th>Họ tên</th>
-                            <th>Ảnh gốc</th>
+                            <th>Đường dẫn ảnh</th>
                             <th>Ngày lưu</th>
                             <th>Thao tác</th>
                         </tr>
@@ -538,13 +616,13 @@
                         {% for f in face_records %}
                         <tr>
                             <td>{{ f.id }}</td>
-                            <td style="color: var(--accent-blue); font-weight: 600;">{{ f.employee_code }}</td>
-                            <td style="color: var(--text-primary);">{{ f.full_name }}</td>
-                            <td>{{ f.image_path or 'Không lưu ảnh' }}</td>
+                            <td style="color: var(--color-ember-orange); font-weight: 600;">{{ f.employee_code }}</td>
+                            <td style="color: var(--color-midnight-charcoal); font-weight: 500;">{{ f.full_name }}</td>
+                            <td style="font-family: monospace; font-size: 12px;">{{ f.image_path or 'Không lưu ảnh' }}</td>
                             <td>{{ f.created_at }}</td>
                             <td>
                                 <form method="post" action="/embeddings/{{ f.id }}/delete" onsubmit="return confirm('Bạn có chắc muốn xóa riêng dữ liệu khuôn mặt này không?');">
-                                    <button type="submit" class="btn btn-secondary" style="padding: 4px 8px; color: var(--accent-red); border-color: rgba(239, 68, 68, 0.3);">Xóa</button>
+                                    <button type="submit" class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;">Xóa</button>
                                 </form>
                             </td>
                         </tr>
@@ -553,8 +631,14 @@
                 </table>
                 {% else %}
                 <div class="empty-state">
-                    <div class="empty-state-icon">👤</div>
-                    <p>Chưa có dữ liệu khuôn mặt nào</p>
+                    <div class="empty-state-icon">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                        </svg>
+                    </div>
+                    <p>Chưa có dữ liệu khuôn mặt nào được đăng ký</p>
                 </div>
                 {% endif %}
             </div>
@@ -564,10 +648,15 @@
         <!-- ── Attendance Logs ── -->
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title">📋 Lịch sử điểm danh</h3>
+                <h3 class="card-title">Lịch sử điểm danh</h3>
                 {% if user.role == 'admin' %}
                 <a href="/export/attendance.csv{% if filters.date_from %}?date_from={{ filters.date_from }}{% endif %}{% if filters.date_to %}&date_to={{ filters.date_to }}{% endif %}{% if filters.department %}&department={{ filters.department }}{% endif %}" class="btn btn-secondary">
-                    📥 Xuất CSV
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    Xuất CSV
                 </a>
                 {% endif %}
             </div>
@@ -581,16 +670,16 @@
                             <th>Họ tên</th>
                             <th>Phòng ban</th>
                             <th>Thời gian</th>
-                            <th>Loại</th>
-                            <th>Độ tin cậy</th>
+                            <th>Trạng thái</th>
+                            <th>Độ tương đồng (Cosine)</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for log in logs %}
                         <tr>
                             <td>{{ log.id }}</td>
-                            <td style="color: var(--accent-blue); font-weight: 600;">{{ log.employee_code }}</td>
-                            <td style="color: var(--text-primary);">{{ log.full_name }}</td>
+                            <td style="color: var(--color-ember-orange); font-weight: 600;">{{ log.employee_code }}</td>
+                            <td style="color: var(--color-midnight-charcoal); font-weight: 500;">{{ log.full_name }}</td>
                             <td>{{ log.department }}</td>
                             <td>{{ log.check_time }}</td>
                             <td>
@@ -605,7 +694,9 @@
                                 <span class="confidence-bar">
                                     <span class="confidence-fill" style="width: {{ (log.confidence * 100)|int }}%;"></span>
                                 </span>
-                                {{ "%.3f"|format(log.confidence) }}
+                                <span style="font-weight: 600; color: var(--color-midnight-charcoal);">
+                                    {{ "%.3f"|format(log.confidence) }}
+                                </span>
                                 {% else %}
                                 –
                                 {% endif %}
@@ -616,8 +707,15 @@
                 </table>
                 {% else %}
                 <div class="empty-state">
-                    <div class="empty-state-icon">📋</div>
-                    <p>Chưa có dữ liệu điểm danh</p>
+                    <div class="empty-state-icon">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="16" y1="2" x2="16" y2="6"></line>
+                            <line x1="8" y1="2" x2="8" y2="6"></line>
+                            <line x1="3" y1="10" x2="21" y2="10"></line>
+                        </svg>
+                    </div>
+                    <p>Chưa có dữ liệu điểm danh nào phù hợp</p>
                 </div>
                 {% endif %}
             </div>
