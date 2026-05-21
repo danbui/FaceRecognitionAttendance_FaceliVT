@@ -1,0 +1,14 @@
+step,model,mean_ms,median_ms,p95_ms,min_ms,max_ms
+detection,shared,5.31,2.82,5.20,1.88,2989.14
+best_frame,shared,3.37,0.49,0.99,0.02,4492.14
+alignment,shared,1.07,0.19,0.41,0.09,942.32
+state_check,shared,0.00,0.00,0.00,0.00,0.05
+emb,SFace Original,22.38,17.78,33.89,9.01,4209.11
+emb,SFace INT8,37.36,30.44,57.08,16.81,2623.91
+emb,SFace INT8 BQ,24.92,17.65,33.41,8.88,12297.80
+knn,SFace Original,0.79,0.10,0.24,0.06,1103.23
+knn,SFace INT8,1.25,0.13,0.22,0.09,2024.82
+knn,SFace INT8 BQ,0.58,0.10,0.23,0.06,1026.71
+total,SFace Original,32.95,21.44,40.77,11.81,13254.45
+total,SFace INT8,48.38,34.11,63.39,19.77,12060.21
+total,SFace INT8 BQ,35.28,21.39,39.98,11.43,17455.28

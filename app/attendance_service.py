@@ -15,6 +15,7 @@ Optimizations for Raspberry Pi 4:
 from pathlib import Path
 from datetime import datetime, timedelta
 import time
+import threading
 import cv2
 import numpy as np
 from typing import Optional, Dict, Tuple
@@ -270,7 +271,7 @@ def recognize_and_attend(
             "message": error_msg,
         }
 
-    # ── Record attendance (DB write) ──
+    # ── Record attendance (DB write in background daemon thread) ──
     try:
         landmarks = face_detection[4:14].reshape((5, 2))
         face_crop = align_face_arcface(frame, landmarks)
@@ -278,8 +279,30 @@ def recognize_and_attend(
         x, y, w, h = int(face_detection[0]), int(face_detection[1]), int(face_detection[2]), int(face_detection[3])
         face_crop = frame[max(0, y):min(frame.shape[0], y+h), max(0, x):min(frame.shape[1], x+w)].copy()
         
-    image_path = save_face_image(face_crop, f"attend_{match['employee_code']}")
-    add_attendance(match["employee_id"], match["confidence"], check_type, image_path)
+    filename = f"attend_{match['employee_code']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+    image_path = str(CAPTURE_DIR / filename)
+
+    # Chạy ngầm việc nén/lưu ảnh vật lý và ghi log SQLite
+    def save_and_log_async(crop, img_path, emp_id, conf, c_type):
+        try:
+            CAPTURE_DIR.mkdir(parents=True, exist_ok=True)
+            is_success, buffer = cv2.imencode(".jpg", crop)
+            if is_success:
+                with open(img_path, "wb") as f:
+                    f.write(buffer.tobytes())
+        except Exception as e:
+            print(f"[Attendance Async] Cảnh báo: Không thể lưu ảnh điểm danh: {e}")
+            
+        try:
+            add_attendance(emp_id, conf, c_type, img_path)
+        except Exception as e:
+            print(f"[Attendance Async] Lỗi: Không thể thêm log điểm danh vào SQLite: {e}")
+
+    threading.Thread(
+        target=save_and_log_async,
+        args=(face_crop, image_path, match["employee_id"], match["confidence"], check_type),
+        daemon=True
+    ).start()
 
     # ── Update RAM cache ──
     _state_cache.record_state(match["employee_id"], check_type)

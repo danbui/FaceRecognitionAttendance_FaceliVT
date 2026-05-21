@@ -76,8 +76,11 @@ class BestFrameSelector:
     # =========================================================
 
     def compute_quality_score(self, frame, face_crop, bbox, landmarks=None):
-        sharpness = self.compute_sharpness(face_crop)
-        brightness = self.compute_brightness(face_crop)
+        if face_crop.size == 0:
+            return 0.0
+        face_gray = cv2.cvtColor(face_crop, cv2.COLOR_BGR2GRAY)
+        sharpness = self.compute_sharpness(face_gray)
+        brightness = self.compute_brightness(face_gray)
         face_size = self.compute_face_size(frame, bbox)
         frontalness = 0.5
 
@@ -100,14 +103,20 @@ class BestFrameSelector:
         """
         Variance of Laplacian
         """
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        if len(img.shape) == 3 and img.shape[2] == 3:
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = img
         score = cv2.Laplacian(gray, cv2.CV_64F).var()
         # normalize
         score = min(score / 1000.0, 1.0)
         return score
 
     def compute_brightness(self, img):
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        if len(img.shape) == 3 and img.shape[2] == 3:
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = img
         mean = np.mean(gray)
         # ideal brightness ~120-180
         score = 1.0 - abs(mean - 150) / 150.0

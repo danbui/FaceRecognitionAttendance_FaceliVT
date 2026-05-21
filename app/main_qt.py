@@ -77,15 +77,29 @@ class CameraWorker(QThread):
         from .face_detector import FaceDetector
         detector = FaceDetector()
         
+        frame_count = 0
+        last_had_face = False
+        
         for frame in self.cam.frames():
             if not self.running:
                 break
                 
+            frame_count += 1
+            
             if self.skip_detection:
                 face_box, face_raw = None, None
+                last_had_face = False
             else:
-                clean_frame = frame.copy()
-                face_box, face_raw = detector.detect_largest_with_raw(clean_frame)
+                should_detect = True
+                if not last_had_face and frame_count % 3 != 0:
+                    should_detect = False
+                    
+                if should_detect:
+                    clean_frame = frame.copy()
+                    face_box, face_raw = detector.detect_largest_with_raw(clean_frame)
+                    last_had_face = (face_box is not None)
+                else:
+                    face_box, face_raw = None, None
                 
             self.frame_ready.emit(frame, face_box, face_raw)
 

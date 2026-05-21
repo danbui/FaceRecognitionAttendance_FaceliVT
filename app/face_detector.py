@@ -74,12 +74,35 @@ class FaceDetector:
             where: re=right_eye, le=left_eye, nt=nose_tip, rcm=right_corner_mouth, lcm=left_corner_mouth.
             Returns None if no faces detected.
         """
-        h, w, _ = frame.shape
-        self.detector.setInputSize((w, h))
-        retval, detections = self.detector.detect(frame)
+        orig_h, orig_w = frame.shape[:2]
+        target_w = 320
+
+        if orig_w > target_w:
+            scale_x = orig_w / float(target_w)
+            target_h = int(round(orig_h / scale_x))
+            scale_y = orig_h / float(target_h)
+            small_frame = cv2.resize(frame, (target_w, target_h))
+        else:
+            small_frame = frame
+            scale_x = 1.0
+            scale_y = 1.0
+            target_w = orig_w
+            target_h = orig_h
+
+        self.detector.setInputSize((target_w, target_h))
+        retval, detections = self.detector.detect(small_frame)
 
         if detections is None or len(detections) == 0:
             return None
+
+        # Scale detections back to original size
+        if scale_x != 1.0 or scale_y != 1.0:
+            detections = detections.copy()
+            # X-coordinates: x, w, x_re, x_le, x_nt, x_rcm, x_lcm (indices 0, 2, 4, 6, 8, 10, 12)
+            detections[:, [0, 2, 4, 6, 8, 10, 12]] *= scale_x
+            # Y-coordinates: y, h, y_re, y_le, y_nt, y_rcm, y_lcm (indices 1, 3, 5, 7, 9, 11, 13)
+            detections[:, [1, 3, 5, 7, 9, 11, 13]] *= scale_y
+
         return detections
 
     def detect_largest(self, frame: np.ndarray) -> Optional[Box]:
@@ -123,6 +146,15 @@ def is_face_inside_guide(face: Box, guide: Box, min_ratio: float = 0.40) -> bool
     """Check if the detected face is properly positioned inside the guide box."""
     x, y, w, h = face
     gx, gy, gw, gh = guide
-    inside = x > gx and y > gy and x + w < gx + gw and y + h < gy + gh
+    
+    # Cho phép sai số biên (lệch ra ngoài tối đa 15% kích thước khung hướng dẫn)
+    margin_w = int(gw * 0.15)
+    margin_h = int(gh * 0.15)
+    
+    inside = (x > gx - margin_w and 
+              y > gy - margin_h and 
+              x + w < gx + gw + margin_w and 
+              y + h < gy + gh + margin_h)
+              
     size_ok = w > gw * min_ratio and h > gh * min_ratio
     return inside and size_ok

@@ -16,7 +16,7 @@ MODELS_DIR.mkdir(exist_ok=True)
 # ── Model files ────────────────────────────────────────
 YUNET_MODEL = MODELS_DIR / "face_detection_yunet_2023mar.onnx"
 SFACE_MODEL = MODELS_DIR / "face_recognition_sface_2021dec.onnx"
-FACELIVT_MODEL = MODELS_DIR / "facelivtv2_s_finetuned_3phase.onnx"
+FACELIVT_MODEL = MODELS_DIR / "facelivtv2_l.onnx"
 
 # ── Face Recognition Backend ──────────────────────────
 # "auto"     = thử FaceLiVT trước, nếu lỗi fallback SFace
@@ -38,7 +38,7 @@ RECOGNITION_COSINE_THRESHOLD = 0.363 # Sẽ được cập nhật runtime bởi 
 
 # ── Kiosk ──────────────────────────────────────────────
 # Time (seconds) face must be stable inside guide box before action
-STABLE_FACE_SECONDS = 1.5
+STABLE_FACE_SECONDS = 0.8
 # Cooldown (minutes) between two scans of the SAME action (e.g. IN -> IN)
 DUPLICATE_COOLDOWN_MINUTES = 1
 # Interval (seconds) to purge expired entries from in-memory cooldown cache

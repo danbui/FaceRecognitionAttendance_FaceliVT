@@ -442,6 +442,7 @@ def run_kiosk(args):
     }
 
     try:
+        frame_count = 0
         while True:
             now = time.time()
             key = cv2.waitKey(1) & 0xFF
@@ -455,6 +456,8 @@ def run_kiosk(args):
             if frame is None:
                 time.sleep(0.01)
                 continue
+
+            frame_count += 1
 
             # ── Check for AI worker results (non-blocking) ──
             ai_result = ai_worker.get_result()
@@ -590,8 +593,15 @@ def run_kiosk(args):
                 face_box, face_raw = None, None
                 stable_start = None
             else:
-                # Only detect face when NOT showing a result
-                face_box, face_raw = detector.detect_largest_with_raw(frame)
+                # Frame skipping: Bỏ qua 2 trong 3 khung hình khi chưa định vị được mặt trong guide box
+                should_detect = True
+                if stable_start is None and frame_count % 3 != 0:
+                    should_detect = False
+
+                if should_detect:
+                    face_box, face_raw = detector.detect_largest_with_raw(frame)
+                else:
+                    face_box, face_raw = None, None
                 # Clear expired result
                 if last_result and now >= result_display_until:
                     # After enrollment, auto-return to input screen

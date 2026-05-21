@@ -151,36 +151,37 @@ def run_latency_benchmark(images, detector, selector, embedders):
     for emb in embedders:
         galleries[emb.name] = (np.array(galleries[emb.name][0], dtype=np.float32), galleries[emb.name][1])
 
-    det_times, bf_times, st_times = [], [], []
+    det_times = {emb.name: [] for emb in embedders}
+    bf_times = {emb.name: [] for emb in embedders}
+    st_times = {emb.name: [] for emb in embedders}
     aln_times = {emb.name: [] for emb in embedders}
     emb_times = {emb.name: [] for emb in embedders}
     knn_times = {emb.name: [] for emb in embedders}
     tot_times = {emb.name: [] for emb in embedders}
 
-    print(f"  [+] Benchmarking {len(images)} images...")
-    n_faces = 0
-    for idx, p in enumerate(images):
-        img = imread_u(p)
-        if img is None: continue
+    print(f"  [+] Benchmarking {len(images)} images independently for each model...")
+    for emb in embedders:
+        print(f"\n  ➤ Model: {emb.name}")
+        for idx, p in enumerate(images):
+            img = imread_u(p)
+            if img is None: continue
 
-        # 1. Detection
-        t0 = time.perf_counter()
-        box, raw = detector.detect_largest_with_raw(img)
-        dt_det = (time.perf_counter() - t0) * 1000
-        det_times.append(dt_det)
-        if raw is None: continue
-        n_faces += 1
+            # 1. Detection
+            t0 = time.perf_counter()
+            box, raw = detector.detect_largest_with_raw(img)
+            dt_det = (time.perf_counter() - t0) * 1000
+            det_times[emb.name].append(dt_det)
+            if raw is None: continue
 
-        # 2. Best Frame
-        t0 = time.perf_counter()
-        selector.reset()
-        selector.update(img.copy(), box, raw[4:14], raw)
-        bf, br, _ = selector.get_best()
-        if bf is None: bf, br = img, raw
-        dt_bf = (time.perf_counter() - t0) * 1000
-        bf_times.append(dt_bf)
+            # 2. Best Frame
+            t0 = time.perf_counter()
+            selector.reset()
+            selector.update(img.copy(), box, raw[4:14], raw)
+            bf, br, _ = selector.get_best()
+            if bf is None: bf, br = img, raw
+            dt_bf = (time.perf_counter() - t0) * 1000
+            bf_times[emb.name].append(dt_bf)
 
-        for i, emb in enumerate(embedders):
             # 3. Alignment
             t0 = time.perf_counter()
             aligned = emb.align(bf, br)
@@ -200,20 +201,22 @@ def run_latency_benchmark(images, detector, selector, embedders):
             dt_knn = (time.perf_counter() - t0) * 1000
             knn_times[emb.name].append(dt_knn)
 
-            # 6. State Machine (shared logic, just simulate)
+            # 6. State Machine (simulate overhead)
             t0 = time.perf_counter()
             _ = res
             dt_st = (time.perf_counter() - t0) * 1000
-            if i == 0: st_times.append(dt_st)
+            st_times[emb.name].append(dt_st)
 
             # Total
             tot_times[emb.name].append(dt_det + dt_bf + dt_aln + dt_emb + dt_knn + dt_st)
 
-        if (idx+1) % 50 == 0 or (idx+1) == len(images):
-            print(f"      ... {idx+1}/{len(images)}")
+            if (idx+1) % 50 == 0 or (idx+1) == len(images):
+                print(f"      ... {idx+1}/{len(images)}")
 
     return {
-        "det": stats(det_times), "bf": stats(bf_times), "st": stats(st_times),
+        "det": {e.name: stats(det_times[e.name]) for e in embedders},
+        "bf": {e.name: stats(bf_times[e.name]) for e in embedders},
+        "st": {e.name: stats(st_times[e.name]) for e in embedders},
         "aln": {e.name: stats(aln_times[e.name]) for e in embedders},
         "emb": {e.name: stats(emb_times[e.name]) for e in embedders},
         "knn": {e.name: stats(knn_times[e.name]) for e in embedders},
@@ -236,26 +239,8 @@ def print_latency_report(res, embedders):
     print(hdr)
     print(sep)
     
-    def print_shared_step(step_name, data_key):
-        for m in metrics:
-            row = f"  {f'{step_name} ({m})':<18}"
-            val = res[data_key][m]
-            for _ in embedders:
-                row += f" │ {val:>8.2f}  "
-            print(row)
-        print(sep)
-        
-    def print_model_step(step_name, data_key):
-        for m in metrics:
-            row = f"  {f'{step_name} ({m})':<18}"
-            for emb in embedders:
-                val = res[data_key][emb.name][m]
-                row += f" │ {val:>8.2f}  "
-            print(row)
-        print(sep)
-
-    print_shared_step("1. Detect", "det")
-    print_shared_step("2. Select", "bf")
+    print_model_step("1. Detect", "det")
+    print_model_step("2. Select", "bf")
     print_model_step("3. Align", "aln")
     print_model_step("4. Embed", "emb")
     print_model_step("5. KNN", "knn")

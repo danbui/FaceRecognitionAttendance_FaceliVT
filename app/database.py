@@ -35,7 +35,11 @@ def blob_to_embedding(blob: bytes) -> np.ndarray:
 def get_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(str(DB_PATH), timeout=10)
     conn.row_factory = sqlite3.Row
-    # Xóa PRAGMA WAL để đảm bảo SQLite ghi thẳng dữ liệu vào file .db ngay lập tức (an toàn hơn khi thoát đột ngột trên Windows)
+    # Kích hoạt WAL mode để tăng hiệu năng đọc ghi đồng thời và tránh khóa database
+    try:
+        conn.execute("PRAGMA journal_mode=WAL;")
+    except Exception as e:
+        print(f"[Database] Không thể bật WAL mode: {e}")
     return conn
 
 

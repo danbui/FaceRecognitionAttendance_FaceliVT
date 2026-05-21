@@ -304,8 +304,10 @@ def main():
 
     print("[System] === HE THONG SAN SANG ===")
 
+    frame_count = 0
     for frame in cam.frames():
         now = time.time()
+        frame_count += 1
 
         # ── Kiểm tra kết quả AI (non-blocking) ──
         ai_result = ai_worker.get_result()
@@ -444,7 +446,13 @@ def main():
                         continue
                     last_result = None
 
-                face_box, face_raw = detector.detect_largest_with_raw(clean_frame)
+                # Bỏ qua 2 trong 3 khung hình nếu không có khuôn mặt ổn định trong khung hướng dẫn
+                should_detect = True
+                if stable_start is None and frame_count % 3 != 0:
+                    should_detect = False
+
+                if should_detect:
+                    face_box, face_raw = detector.detect_largest_with_raw(clean_frame)
             else:
                 stable_start = None
                 frame_selector.reset()

@@ -93,8 +93,22 @@ class FaceEmbedder:
 
         try:
             import onnxruntime as ort
-            providers = ['CPUExecutionProvider']
-            self.session = ort.InferenceSession(str(FACELIVT_MODEL), providers=providers)
+            opts = ort.SessionOptions()
+            opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            opts.intra_op_num_threads = 4
+            opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+
+            # Thử sử dụng XNNPACKExecutionProvider để tối ưu hóa CPU ARM nhúng
+            providers = [
+                ('XNNPACKExecutionProvider', {'intra_op_num_threads': 4}),
+                'CPUExecutionProvider'
+            ]
+            try:
+                self.session = ort.InferenceSession(str(FACELIVT_MODEL), sess_options=opts, providers=providers)
+            except Exception as e:
+                print(f"[FaceEmbedder] Cảnh báo: Lỗi cấu hình XNNPACK ({e}), fallback sang CPU thông thường.")
+                providers = ['CPUExecutionProvider']
+                self.session = ort.InferenceSession(str(FACELIVT_MODEL), sess_options=opts, providers=providers)
             self.input_name = self.session.get_inputs()[0].name
 
             # Auto-detect output dimension từ model (có thể là 512 hoặc 1284)
