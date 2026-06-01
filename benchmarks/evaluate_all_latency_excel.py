@@ -24,6 +24,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from app.face_detector import FaceDetector
 from app.best_frame_selector import BestFrameSelector
 from app.config import MODELS_DIR
+from scripts.system_monitor import SystemMonitor
 
 # ── DANH SÁCH MÔ HÌNH ───────────────────────────────────────────
 MODELS_TO_EVALUATE = [
@@ -336,6 +337,13 @@ def main():
     out_dir = PROJECT_ROOT / "benchmarks"
     out_dir.mkdir(exist_ok=True)
 
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Khởi chạy giám sát hệ thống (CPU%, RAM, Nhiệt độ)
+    system_log_path = out_dir / f"system_latency_metrics_{ts}.csv"
+    monitor = SystemMonitor(interval=0.5, log_path=system_log_path)
+    monitor.start()
+
     print("=" * 80)
     print("  🚀 CHẠY LẠI ĐÁNH GIÁ TỐC ĐỘ (LATENCY) CỦA CÁC MÔ HÌNH VÀ XUẤT EXCEL")
     print("=" * 80)
@@ -358,6 +366,7 @@ def main():
 
     if not embedders:
         print("❌ Không có mô hình nào để chạy!")
+        monitor.stop()
         return
 
     all_images = sorted(f for f in ds.rglob("*") if f.is_file() and f.suffix.lower() in IMG_EXTS)
@@ -407,7 +416,6 @@ def main():
     df_detailed = pd.DataFrame(detailed_data)
 
     # Ghi ra file Excel
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     excel_filename = f"latency_results_{ts}.xlsx"
     excel_path = out_dir / excel_filename
     
@@ -418,6 +426,9 @@ def main():
     print(f"\n✅ Đã xuất dữ liệu latency ra file: {excel_path}")
     
     style_excel(excel_path)
+    
+    # Dừng monitor và in báo cáo hệ thống
+    monitor.stop()
     
     print(f"\n🎉 Hoàn thành xuất sắc! File kết quả Latency Excel nằm tại:\n{excel_path}")
 

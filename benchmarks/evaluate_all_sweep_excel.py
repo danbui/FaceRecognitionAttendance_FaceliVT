@@ -24,6 +24,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.face_detector import FaceDetector
 from app.config import MODELS_DIR
+from scripts.system_monitor import SystemMonitor
 
 # ── DANH SÁCH MÔ HÌNH ───────────────────────────────────────────
 MODELS_TO_EVALUATE = [
@@ -349,6 +350,13 @@ def main():
     out_dir = PROJECT_ROOT / "benchmarks"
     out_dir.mkdir(exist_ok=True)
 
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Khởi chạy giám sát hệ thống (CPU%, RAM, Nhiệt độ)
+    system_log_path = out_dir / f"system_sweep_metrics_{ts}.csv"
+    monitor = SystemMonitor(interval=0.5, log_path=system_log_path)
+    monitor.start()
+
     print("=" * 80)
     print("  🚀 CHẠY LẠI ĐÁNH GIÁ THRESHOLD SWEEP CHO CÁC MÔ HÌNH VÀ XUẤT EXCEL")
     print("=" * 80)
@@ -371,6 +379,7 @@ def main():
 
     if not embedders:
         print("❌ Không có mô hình nào để chạy!")
+        monitor.stop()
         return
 
     # Chia dữ liệu và pre-detect khuôn mặt
@@ -419,7 +428,6 @@ def main():
     df_sweep = pd.DataFrame(sweep_data)
 
     # Ghi ra file Excel
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     excel_filename = f"sweep_threshold_results_{ts}.xlsx"
     excel_path = out_dir / excel_filename
     
@@ -431,6 +439,9 @@ def main():
     
     # Định dạng lại bảng Excel cho đẹp mắt
     style_excel(excel_path)
+    
+    # Dừng monitor và in báo cáo hệ thống
+    monitor.stop()
     
     print(f"\n🎉 Hoàn thành xuất sắc! File kết quả Excel nằm tại:\n{excel_path}")
 
