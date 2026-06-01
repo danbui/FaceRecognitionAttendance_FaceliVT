@@ -134,17 +134,34 @@ class BestFrameSelector:
 
     def compute_frontalness(self, landmarks):
         """
-        landmarks:
-        [left_eye_x, left_eye_y,
-         right_eye_x, right_eye_y,
-         nose_x, nose_y,
-         mouth_left_x, mouth_left_y,
-         mouth_right_x, mouth_right_y]
+        Ước lượng góc xoay 3 chiều (Roll, Yaw, Pitch) từ 5 điểm mốc landmarks.
+        Landmarks format từ YuNet: [re_x, re_y, le_x, le_y, nt_x, nt_y, rcm_x, rcm_y, lcm_x, lcm_y]
         """
-        le_x, le_y = landmarks[0], landmarks[1]
-        re_x, re_y = landmarks[2], landmarks[3]
+        re_x, re_y = landmarks[0], landmarks[1]
+        le_x, le_y = landmarks[2], landmarks[3]
+        nt_x, nt_y = landmarks[4], landmarks[5]
+        rcm_x, rcm_y = landmarks[6], landmarks[7]
+        lcm_x, lcm_y = landmarks[8], landmarks[9]
 
-        eye_diff = abs(le_y - re_y)
-        # mắt càng ngang → càng frontal
-        score = 1.0 - min(eye_diff / 20.0, 1.0)
-        return score
+        # 1. Roll Score (Đầu nghiêng trái/phải)
+        eye_diff_y = abs(re_y - le_y)
+        roll_score = 1.0 - min(eye_diff_y / 15.0, 1.0)
+
+        # 2. Yaw Score (Quay mặt sang trái/phải)
+        d_left = abs(nt_x - le_x)
+        d_right = abs(re_x - nt_x)
+        max_d_h = max(d_left, d_right)
+        yaw_score = min(d_left, d_right) / max_d_h if max_d_h > 0 else 0.0
+
+        # 3. Pitch Score (Cúi/Ngước đầu)
+        eyes_mid_y = (re_y + le_y) / 2.0
+        mouth_mid_y = (rcm_y + lcm_y) / 2.0
+        d_upper = abs(nt_y - eyes_mid_y)
+        d_lower = abs(mouth_mid_y - nt_y)
+        max_d_v = max(d_upper, d_lower)
+        pitch_score = min(d_upper, d_lower) / max_d_v if max_d_v > 0 else 0.0
+
+        # Trọng số kết hợp tối ưu hình học
+        frontalness = roll_score * 0.4 + yaw_score * 0.4 + pitch_score * 0.2
+        return frontalness
+

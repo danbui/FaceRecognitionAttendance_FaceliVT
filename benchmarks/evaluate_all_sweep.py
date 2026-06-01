@@ -166,6 +166,18 @@ def evaluate_at_threshold(probe_embs, probe_labels, matrix, gallery_labels, thre
     frr = unknown / total * 100 if total else 0
     return {"thr": threshold, "acc": acc, "far": far, "frr": frr, "correct": correct, "wrong": wrong, "unknown": unknown}
 
+def print_threshold_table(model_name, results, best_thr):
+    """In bảng chi tiết các thông số ở mỗi ngưỡng cho 1 model."""
+    print(f"\n  {'─'*90}")
+    print(f"  📋 Chi tiết từng ngưỡng: {model_name}")
+    print(f"  {'─'*90}")
+    print(f"  {'':>3} {'Threshold':>10} │ {'Acc%':>8} │ {'FAR%':>8} │ {'FRR%':>8} │ {'Correct':>8} │ {'Wrong':>8} │ {'Unknown':>8}")
+    print(f"  {'':>3} {'─'*10}─┼─{'─'*8}─┼─{'─'*8}─┼─{'─'*8}─┼─{'─'*8}─┼─{'─'*8}─┼─{'─'*8}")
+    for r in results:
+        marker = " ★" if abs(r['thr'] - best_thr) < 1e-6 else "  "
+        print(f"  {marker} {r['thr']:>10.3f} │ {r['acc']:>8.2f} │ {r['far']:>8.2f} │ {r['frr']:>8.2f} │ {r['correct']:>8d} │ {r['wrong']:>8d} │ {r['unknown']:>8d}")
+    print(f"  {'─'*90}")
+
 def run_accuracy_sweep(split, detector, embedders):
     print(f"\n{'='*70}")
     print(f"🎯 BENCHMARK ĐỘ CHÍNH XÁC (THRESHOLD SWEEP)")
@@ -187,8 +199,12 @@ def run_accuracy_sweep(split, detector, embedders):
         best = max(results, key=lambda r: (r["acc"], -r["far"]))
         all_results[emb.name] = {"best": best, "sweep": results}
         
-        print(f"    -> Xong trong {time.perf_counter()-t0:.1f}s. Gallery: {len(g_labels)}, Probes: {len(p_labels)}")
+        elapsed = time.perf_counter() - t0
+        print(f"    -> Xong trong {elapsed:.1f}s. Gallery: {len(g_labels)}, Probes: {len(p_labels)}")
         print(f"    -> Tối ưu tại Thr={best['thr']:.3f}: Acc={best['acc']:.2f}%, FAR={best['far']:.2f}%, FRR={best['frr']:.2f}%")
+
+        # In bảng chi tiết từng ngưỡng
+        print_threshold_table(emb.name, results, best['thr'])
 
     return all_results
 
@@ -240,18 +256,34 @@ def main():
     acc_res = run_accuracy_sweep(split, detector, embedders)
     print_accuracy_report(acc_res, embedders)
 
-    # Save CSV
+    # Save CSV — full sweep data (tất cả ngưỡng cho mỗi model)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     csv_path = out_dir / f"sweep_all_models_{ts}.csv"
     with open(csv_path, "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["Model", "Opt_Thr", "Accuracy", "FAR", "FRR"])
+        w.writerow(["Model", "Threshold", "Accuracy", "FAR", "FRR", "Correct", "Wrong", "Unknown", "Is_Optimal"])
+        for emb in embedders:
+            best_thr = acc_res[emb.name]["best"]["thr"]
+            for r in acc_res[emb.name]["sweep"]:
+                is_opt = "YES" if abs(r['thr'] - best_thr) < 1e-6 else ""
+                w.writerow([
+                    emb.name, f"{r['thr']:.3f}", f"{r['acc']:.2f}", f"{r['far']:.2f}", f"{r['frr']:.2f}",
+                    r['correct'], r['wrong'], r['unknown'], is_opt
+                ])
+    print(f"\n✅ Đã lưu kết quả Sweep đầy đủ ra: {csv_path}")
+
+    # Save summary CSV — chỉ best threshold mỗi model
+    csv_summary = out_dir / f"sweep_summary_{ts}.csv"
+    with open(csv_summary, "w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["Model", "Opt_Thr", "Accuracy", "FAR", "FRR", "Correct", "Wrong", "Unknown"])
         for emb in embedders:
             b = acc_res[emb.name]["best"]
             w.writerow([
-                emb.name, f"{b['thr']:.3f}", f"{b['acc']:.2f}", f"{b['far']:.2f}", f"{b['frr']:.2f}"
+                emb.name, f"{b['thr']:.3f}", f"{b['acc']:.2f}", f"{b['far']:.2f}", f"{b['frr']:.2f}",
+                b['correct'], b['wrong'], b['unknown']
             ])
-    print(f"\n✅ Đã lưu kết quả Sweep ra: {csv_path}")
+    print(f"  📊 Bảng tóm tắt (best threshold): {csv_summary}")
 
 if __name__ == "__main__":
     main()

@@ -1,14 +1,18 @@
+import os
 import fitz
 from pathlib import Path
 
 
-PDF_DIR = Path(__file__).parent / "Face recognition papers"
-MD_DIR = Path(__file__).parent / "Face recognition papers" / "md"
+PDF_DIR = Path(__file__).parent.parent / "docs" / "Face recognition papers"
+MD_DIR = PDF_DIR / "md"
 MD_DIR.mkdir(exist_ok=True)
 
 
 def extract_text_from_pdf(pdf_path: Path) -> str:
-    doc = fitz.open(pdf_path)
+    path_str = str(pdf_path.resolve())
+    if os.name == 'nt' and not path_str.startswith('\\\\?\\'):
+        path_str = '\\\\?\\' + path_str
+    doc = fitz.open(path_str)
     pages = []
 
     for i, page in enumerate(doc):
@@ -90,6 +94,9 @@ def main():
     
     success = 0
     for pdf_path in pdfs:
+        short_name = safe_filename(pdf_path.stem)
+        out_path = MD_DIR / f"{short_name}.md"
+        
         print(f"Parsing {pdf_path.name}...")
         try:
             raw_text = extract_text_from_pdf(pdf_path)
@@ -98,8 +105,6 @@ def main():
             title = pdf_path.stem.replace("_", " ").title()
             md = convert_to_md_template(title, clean)
 
-            short_name = safe_filename(pdf_path.stem)
-            out_path = MD_DIR / f"{short_name}.md"
             out_path.write_text(md, encoding="utf-8")
 
             print(f"  -> Saved to {out_path.name}")
@@ -107,7 +112,7 @@ def main():
         except Exception as e:
             print(f"  -> ERROR: {e}")
 
-    print(f"\nDone! {success}/{len(pdfs)} files converted.")
+    print(f"\nDone! {success}/{len(pdfs)} files processed.")
 
 
 if __name__ == "__main__":

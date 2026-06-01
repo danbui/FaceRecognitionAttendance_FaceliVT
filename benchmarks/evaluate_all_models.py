@@ -238,6 +238,15 @@ def print_latency_report(res, embedders):
         sep += f"─┼─{'─'*10}"
     print(hdr)
     print(sep)
+
+    def print_model_step(step_name, data_key):
+        for m in metrics:
+            row = f"  {f'{step_name} ({m})':<18}"
+            for emb in embedders:
+                val = res[data_key][emb.name][m]
+                row += f" │ {val:>8.2f}  "
+            print(row)
+        print(sep)
     
     print_model_step("1. Detect", "det")
     print_model_step("2. Select", "bf")
@@ -256,10 +265,13 @@ def print_latency_report(res, embedders):
 
 
 # ── PHẦN 2: THRESHOLD SWEEP (ACCURACY) ─────────────────────────
-def split_dataset(data_dir, test_ratio=0.2):
+def split_dataset(data_dir, test_ratio=0.2, max_people=0):
     rng = random.Random(SEED)
     split = {}
-    for pdir in sorted([d for d in data_dir.iterdir() if d.is_dir()]):
+    pdirs = sorted([d for d in data_dir.iterdir() if d.is_dir()])
+    if max_people > 0:
+        pdirs = pdirs[:max_people]
+    for pdir in pdirs:
         imgs = sorted(f for f in pdir.iterdir() if f.suffix.lower() in IMG_EXTS)
         if len(imgs) < 2: continue
         rng.shuffle(imgs)
@@ -267,18 +279,46 @@ def split_dataset(data_dir, test_ratio=0.2):
         split[pdir.name] = {"gallery": imgs[n_test:], "probe": imgs[:n_test]}
     return split
 
-def extract_all_faces(split, detector, embedder):
+def pre_detect_faces(split, detector):
+    print("  [+] Pre-detecting faces to speed up embedding extraction...")
+    t0 = time.perf_counter()
+    face_cache = {}
+    total_imgs = 0
+    detected_imgs = 0
+    
+    paths = []
+    for label, data in split.items():
+        paths.extend(data["gallery"])
+        paths.extend(data["probe"])
+        
+    for idx, p in enumerate(paths):
+        img = imread_u(p)
+        total_imgs += 1
+        if img is None: continue
+        dets = detector.detect_all(img)
+        if dets is not None:
+            det = dets[int(np.argmax(dets[:, 2] * dets[:, 3]))]
+            face_cache[str(p)] = det
+            detected_imgs += 1
+            
+        if (idx + 1) % 500 == 0 or (idx + 1) == len(paths):
+            print(f"      Pre-detected {idx+1}/{len(paths)} images...")
+            
+    print(f"  → Pre-detected {detected_imgs}/{total_imgs} faces in {time.perf_counter()-t0:.1f}s.")
+    return face_cache
+
+def extract_all_faces(split, face_cache, embedder):
     gallery_embs, gallery_labels = [], []
     probe_embs, probe_labels = [], []
 
     for label, data in split.items():
         # Enroll Gallery
         for p in data["gallery"]:
+            p_str = str(p)
+            if p_str not in face_cache: continue
             img = imread_u(p)
             if img is None: continue
-            dets = detector.detect_all(img)
-            if dets is None: continue
-            det = dets[int(np.argmax(dets[:, 2] * dets[:, 3]))]
+            det = face_cache[p_str]
             vec = embedder.get_embedding(embedder.align(img, det))
             if np.linalg.norm(vec) < 1e-8: continue
             gallery_embs.append(vec)
@@ -286,11 +326,11 @@ def extract_all_faces(split, detector, embedder):
         
         # Extract Probe
         for p in data["probe"]:
+            p_str = str(p)
+            if p_str not in face_cache: continue
             img = imread_u(p)
             if img is None: continue
-            dets = detector.detect_all(img)
-            if dets is None: continue
-            det = dets[int(np.argmax(dets[:, 2] * dets[:, 3]))]
+            det = face_cache[p_str]
             vec = embedder.get_embedding(embedder.align(img, det))
             if np.linalg.norm(vec) < 1e-8: continue
             probe_embs.append(vec)
@@ -326,7 +366,7 @@ def evaluate_at_threshold(probe_embs, probe_labels, matrix, gallery_labels, thre
     frr = unknown / total * 100 if total else 0
     return {"thr": threshold, "acc": acc, "far": far, "frr": frr, "correct": correct, "wrong": wrong, "unknown": unknown}
 
-def run_accuracy_sweep(split, detector, embedders):
+def run_accuracy_sweep(split, face_cache, embedders):
     print(f"\n{'='*70}")
     print(f"🎯 PHẦN 2: THRESHOLD SWEEP (ACCURACY, FAR, FRR)")
     print(f"{'='*70}")
@@ -337,7 +377,7 @@ def run_accuracy_sweep(split, detector, embedders):
     for i, emb in enumerate(embedders):
         print(f"\n  [{i+1}/{len(embedders)}] Đang quét {emb.name}...")
         t0 = time.perf_counter()
-        matrix, g_labels, p_embs, p_labels = extract_all_faces(split, detector, emb)
+        matrix, g_labels, p_embs, p_labels = extract_all_faces(split, face_cache, emb)
         
         results = []
         for thr in thresholds:
@@ -371,6 +411,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, default="dataset_clean")
     parser.add_argument("--max-latency", type=int, default=200, help="Số ảnh để test latency")
+    parser.add_argument("--max-people", type=int, default=0, help="Số người tối đa để test nhanh")
     parser.add_argument("--test-ratio", type=float, default=0.2, help="Tỉ lệ test set cho accuracy")
     args = parser.parse_args()
 
@@ -416,8 +457,9 @@ def main():
     print_latency_report(lat_res, embedders)
 
     # --- Phần 2: Accuracy ---
-    split = split_dataset(ds, test_ratio=args.test_ratio)
-    acc_res = run_accuracy_sweep(split, detector, embedders)
+    split = split_dataset(ds, test_ratio=args.test_ratio, max_people=args.max_people)
+    face_cache = pre_detect_faces(split, detector)
+    acc_res = run_accuracy_sweep(split, face_cache, embedders)
     print_accuracy_report(acc_res, embedders)
 
     # --- Lưu CSV tổng hợp ---

@@ -182,6 +182,42 @@ def test_matcher():
     embedding_cache._dirty = False
     result_empty = match_embedding(vec_a, threshold=RECOGNITION_COSINE_THRESHOLD)
     test("H_match4", "Empty DB returns None", result_empty is None)
+
+    # Weighted KNN Tie Breaker Test
+    query_vec = np.zeros((1, 512), dtype=np.float32)
+    query_vec[0, 0] = 1.0
+
+    # Build vectors that have specific cosine similarities (dot products) with query_vec
+    def make_vec(sim):
+        v = np.zeros(512, dtype=np.float32)
+        v[0] = sim
+        v[1] = np.sqrt(1.0 - sim**2)
+        return v
+
+    v1 = make_vec(0.85)
+    v2 = make_vec(0.80)
+    v3 = make_vec(0.45)
+    v4 = make_vec(0.45)
+    v5 = make_vec(0.45)
+
+    embedding_cache._rows = [
+        {"id": 10, "employee_id": 10, "employee_code": "NV001", "full_name": "A", "embedding": v1},
+        {"id": 11, "employee_id": 10, "employee_code": "NV001", "full_name": "A", "embedding": v2},
+        {"id": 12, "employee_id": 12, "employee_code": "NV002", "full_name": "B", "embedding": v3},
+        {"id": 13, "employee_id": 12, "employee_code": "NV002", "full_name": "B", "embedding": v4},
+        {"id": 14, "employee_id": 12, "employee_code": "NV002", "full_name": "B", "embedding": v5},
+    ]
+    embedding_cache._matrix = np.vstack([v1, v2, v3, v4, v5])
+    embedding_cache._dirty = False
+
+    # Under threshold=0.40, all 5 are valid.
+    # NV001 has 2 highly similar neighbors.
+    # NV002 has 3 less similar neighbors.
+    # Weighted KNN should select NV001 because weight(0.85) + weight(0.80) > 3 * weight(0.45)
+    result_weighted = match_embedding(query_vec, threshold=0.40)
+    test("H_match5", "Weighted KNN solves tie/correct match",
+         result_weighted is not None and result_weighted["employee_code"] == "NV001",
+         f"matched={result_weighted['employee_code'] if result_weighted else None}")
     
     # Restore dirty flag
     embedding_cache.invalidate()
@@ -373,8 +409,40 @@ def test_model_files():
 
     if FACELIVT_MODEL.exists():
         size_mb = FACELIVT_MODEL.stat().st_size / (1024 * 1024)
-        test("H01d", "FaceLiVT model size ~16MB", 10 < size_mb < 20,
+        test("H01d", "FaceLiVT model size ~35MB", 10 < size_mb < 40,
              f"{size_mb:.1f} MB")
+
+
+# ═══════════════════════════════════════════════════════════════
+# TC-I: BEST FRAMESELECTOR & 3D FRONTALNESS TESTS
+# ═══════════════════════════════════════════════════════════════
+def test_best_frame_selector():
+    section("TC-I: BestFrameSelector & 3D Frontalness")
+    from app.best_frame_selector import BestFrameSelector
+    
+    selector = BestFrameSelector()
+    
+    # Perfect frontal face landmarks (aligned and centered nose/mouth)
+    # Layout: [re_x, re_y, le_x, le_y, nt_x, nt_y, rcm_x, rcm_y, lcm_x, lcm_y]
+    perfect_landmarks = np.array([80, 100, 120, 100, 100, 115, 85, 130, 115, 130], dtype=np.float32)
+    
+    score_perfect = selector.compute_frontalness(perfect_landmarks)
+    test("I01", "Perfect frontal face score is 1.0", abs(score_perfect - 1.0) < 1e-5, f"score={score_perfect:.4f}")
+    
+    # Head tilted/Roll (eyes Y coordinate differs)
+    tilted_landmarks = np.array([80, 95, 120, 105, 100, 115, 85, 130, 115, 130], dtype=np.float32)
+    score_tilted = selector.compute_frontalness(tilted_landmarks)
+    test("I02", "Tilted head score is lower than perfect", score_tilted < score_perfect, f"tilted={score_tilted:.4f}")
+    
+    # Head turned left/right (Yaw)
+    yawed_landmarks = np.array([80, 100, 120, 100, 90, 115, 85, 130, 115, 130], dtype=np.float32)
+    score_yawed = selector.compute_frontalness(yawed_landmarks)
+    test("I03", "Yawed head score is lower than perfect", score_yawed < score_perfect, f"yawed={score_yawed:.4f}")
+    
+    # Head pitched (cúi/ngước đầu)
+    pitched_landmarks = np.array([80, 100, 120, 100, 100, 105, 85, 130, 115, 130], dtype=np.float32)
+    score_pitched = selector.compute_frontalness(pitched_landmarks)
+    test("I04", "Pitched head score is lower than perfect", score_pitched < score_perfect, f"pitched={score_pitched:.4f}")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -388,6 +456,7 @@ if __name__ == "__main__":
     test_model_files()
     test_database()
     test_matcher()
+    test_best_frame_selector()
     test_duplicate_detection()
     test_web_auth()
 

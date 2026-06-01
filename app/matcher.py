@@ -126,12 +126,16 @@ def match_embedding(
             continue
             
         code = rows[idx]["employee_code"]
+        
+        # Trọng số mũ để ưu tiên láng giềng cực gần
+        weight = np.exp(score * 5.0)
+        
         if code not in votes:
-            votes[code] = 0
+            votes[code] = 0.0
             best_individual_score[code] = score
             best_row[code] = rows[idx]
             
-        votes[code] += 1
+        votes[code] += weight
         # Cập nhật điểm cao nhất nếu người này có nhiều vector trong Top K
         if score > best_individual_score[code]:
             best_individual_score[code] = score
@@ -140,8 +144,8 @@ def match_embedding(
     if not votes:
         return None
 
-    # Tìm người có số Vote cao nhất. 
-    # Nếu bằng Vote (ví dụ A: 2 vote, B: 2 vote), ai có điểm số cá nhân cao hơn sẽ thắng
+    # Tìm người có tổng trọng số phiếu (votes) lớn nhất. 
+    # Nếu bằng Vote (ví dụ A: 2.1 vote, B: 2.1 vote), ai có điểm số cá nhân cao hơn sẽ thắng
     best_code = max(votes.keys(), key=lambda c: (votes[c], best_individual_score[c]))
 
     result = dict(best_row[best_code])
